@@ -447,7 +447,7 @@ def main():
         layout="wide",
         page_icon="🧪",
     )
-    st.title("Détermination du KD — Modèles de Hill et Gabelica (Amélioré)")
+    st.title("Détermination du KD — Modèles de Hill et Gabelica")
     
     # Sidebar — I/O and options
     st.sidebar.header("Paramètres")
@@ -1043,7 +1043,7 @@ def main():
             - Paramètres : KD (converti de Ka), facteur de réponse (R)
             - Corrige explicitement les différences de facteurs de réponse entre espèces libres et complexées
             - Nécessite un titrage équimolaire [cible] = [Ligand]
-            - **Utilise l'équation originale 11 :** I(A)/I(AB) = (1 + √(1 + 4×Ka×C₀)) / (2×R×Ka×C₀)
+            - **Utilise l'équation :** I(A)/I(AB) = (1 + √(1 + 4×Ka×C₀)) / (2×R×Ka×C₀)
             - Fitte : I(A)/I(AB) vs concentration avec Ka, puis convertit en Kd = 1/Ka
 
             **Le facteur de réponse indique la différence d'efficacité d'ionisation entre le complexe et la cible libre.**
