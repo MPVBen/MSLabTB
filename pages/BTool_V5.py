@@ -12,7 +12,7 @@ import warnings
 
 warnings.filterwarnings('ignore')
 
-st.image("C:/Users/maxim_eujcrxj/OneDrive/Documents/ULiège/Doctorat/Softwares/MSLabTB/MSTB.png", width=150)
+st.image("images/MSTB.png", width=150)
 
 # Langue
 lang = st.selectbox("Langue / Language", ["Français", "English"])
