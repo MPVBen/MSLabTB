@@ -366,49 +366,6 @@ def fit_gabelica_corrected(C0, ratio_inverse, ratio_err=None, use_weights=False)
 
 # -----------------------------------------------------------------------------
 
-# Bootstrap helper
-
-# -----------------------------------------------------------------------------
-
-def bootstrap_params(
-    L0,
-    ratio,
-    ratio_err=None,
-    use_weights=False,
-    fix_n_to_1=False,
-    method="hill",
-    n_boot=200,
-    random_seed=0,
-):
-    rng = np.random.default_rng(random_seed)
-    L0 = np.asarray(L0)
-    ratio = np.asarray(ratio)
-    n = len(L0)
-    results = []
-    for _ in range(n_boot):
-        idx = rng.integers(0, n, n) # sample with replacement
-        Ls, Rs = L0[idx], ratio[idx]
-        Rs_err = ratio_err[idx] if ratio_err is not None else None
-        if method == "hill":
-            res = fit_hill(Ls, Rs, ratio_err=Rs_err, use_weights=use_weights, fix_n_to_1=fix_n_to_1)
-            if res is not None:
-                results.append(res["popt"])
-        elif method == "gabelica":
-            res = fit_gabelica_corrected(Ls, Rs, ratio_err=Rs_err, use_weights=use_weights)
-            if res is not None:
-                results.append(res["popt"])
-    if len(results) == 0:
-        return None
-    arr = np.vstack(results)
-    return {
-        "median": np.median(arr, axis=0),
-        "ci_lower": np.percentile(arr, 2.5, axis=0),
-        "ci_upper": np.percentile(arr, 97.5, axis=0),
-        "samples": arr,
-    }
-
-# -----------------------------------------------------------------------------
-
 # Residuals plot
 
 # -----------------------------------------------------------------------------
@@ -484,12 +441,6 @@ def main():
         )
     else:
         fix_n_to_1 = False
-
-    use_weights = st.sidebar.checkbox("Utiliser les erreurs comme poids (sigma)", value=False)
-    do_bootstrap = st.sidebar.checkbox("Bootstrap pour IC 95%", value=False)
-    n_boot = (
-        st.sidebar.slider("Itérations bootstrap", 50, 2000, value=200, step=50)
-        if do_bootstrap else 100
     )
 
     # Outlier exclusion widget - only show after analysis is done
@@ -788,80 +739,6 @@ def main():
                                 st.info("ℹ️ **Note:** Cette version améliorée utilise des limites élargies pour R (0.001-1000 au lieu de 0.1-10) et une estimation initiale intelligente.")
                             else:
                                 st.error("Échec de l'ajustement selon la méthode de Gabelica")
-
-                # ----------------------------------------------------------------
-                # Optional bootstrap
-                # ----------------------------------------------------------------
-                if do_bootstrap and (hill_res is not None or gabelica_res is not None):
-                    st.subheader("Analyse Bootstrap (IC 95%)")
-
-                    if hill_res is not None:
-                        st.write("**Bootstrap pour le modèle de Hill:**")
-                        with st.spinner(f"Bootstrap Hill en cours ({n_boot} itérations)..."):
-                            boot_hill = bootstrap_params(
-                                L0,
-                                ratio_hill,
-                                ratio_err=(ratio_hill_err if use_weights else None),
-                                use_weights=use_weights,
-                                fix_n_to_1=fix_n_to_1,
-                                method="hill",
-                                n_boot=n_boot,
-                                random_seed=1,
-                            )
-
-                        if boot_hill is not None:
-                            bootstrap_data = {
-                                "Paramètre": ["KD (µM)", "Coefficient de Hill (n)", "Facteur de réponse (Rmax)"],
-                                "Médiane": [
-                                    f"{boot_hill['median'][0]:.4f}",
-                                    f"{boot_hill['median'][1]:.4f}",
-                                    f"{boot_hill['median'][2]:.4f}"
-                                ],
-                                "IC 95% inf": [
-                                    f"{boot_hill['ci_lower'][0]:.4f}",
-                                    f"{boot_hill['ci_lower'][1]:.4f}",
-                                    f"{boot_hill['ci_lower'][2]:.4f}"
-                                ],
-                                "IC 95% sup": [
-                                    f"{boot_hill['ci_upper'][0]:.4f}",
-                                    f"{boot_hill['ci_upper'][1]:.4f}",
-                                    f"{boot_hill['ci_upper'][2]:.4f}"
-                                ]
-                            }
-                            bootstrap_df = pd.DataFrame(bootstrap_data)
-                            st.dataframe(bootstrap_df)
-
-                    if gabelica_res is not None:
-                        st.write("**Bootstrap pour la méthode de Gabelica:**")
-                        with st.spinner(f"Bootstrap Gabelica en cours ({n_boot} itérations)..."):
-                            boot_gabelica = bootstrap_params(
-                                L0[finite_mask],
-                                ratio_gabelica[finite_mask],
-                                ratio_err=(ratio_gabelica_err[finite_mask] if use_weights else None),
-                                use_weights=use_weights,
-                                method="gabelica",
-                                n_boot=n_boot,
-                                random_seed=2,
-                            )
-
-                        if boot_gabelica is not None:
-                            bootstrap_data_g = {
-                                "Paramètre": ["KD (µM)", "Facteur de réponse (R)"],
-                                "Médiane": [
-                                    f"{boot_gabelica['median'][0]:.4f}",
-                                    f"{boot_gabelica['median'][1]:.4f}"
-                                ],
-                                "IC 95% inf": [
-                                    f"{boot_gabelica['ci_lower'][0]:.4f}",
-                                    f"{boot_gabelica['ci_lower'][1]:.4f}"
-                                ],
-                                "IC 95% sup": [
-                                    f"{boot_gabelica['ci_upper'][0]:.4f}",
-                                    f"{boot_gabelica['ci_upper'][1]:.4f}"
-                                ]
-                            }
-                            bootstrap_df_g = pd.DataFrame(bootstrap_data_g)
-                            st.dataframe(bootstrap_df_g)
 
                 # ----------------------------------------------------------------
                 # Fit plots - CORRECTED TO AVOID ASYMPTOTE PROBLEMS
