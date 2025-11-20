@@ -273,7 +273,7 @@ def apply_point_exclusions(voltages, data_arrays, excluded_indices):
 uploaded_file = st.file_uploader(t("Téléverse ton fichier CSV", "Upload your CSV file"), type=["csv"])
 
 # Encoding selection
-encoding_option = st.selectbox(t("Choisis l'encodage du fichier", "Select file encoding"), options=["utf-8", "latin1"], index=0)
+encoding_option = st.selectbox(t("Choisis l'encodage du fichier", "Select file encoding"), options=["Sans caractères spéciaux", "Avec caractères spéciaux"], index=0)
 
 if uploaded_file:
     # Sélection du format de données
@@ -846,5 +846,3 @@ if uploaded_file:
         )
 
 st.markdown("---")
-st.markdown(t("Développé avec <3 par M.P.V. Benonit. Modifié avec ajustement sigmoïde statistique et exclusion de points.",
-             "Developed with <3 by M.P.V. Benonit. Modified with statistical sigmoid fitting and point exclusion."))
