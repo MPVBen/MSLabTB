@@ -207,7 +207,7 @@ def simulate_isotopic_distribution(formula, charge, ion_mode, prob=0.99):
     iso = IsoTotalProb(formula=str(formula.formula), prob_to_cover=prob)
     masses = np.array(list(iso.masses))
     probs = np.array(list(iso.probs))
-    mz_raw = (masses + z * PROTON) / abs(z)
+    mz_raw = (masses) / abs(z)
     mono_mz = mz_raw[0]
     mono_decimals = len(f"{mono_mz:.8f}".split('.')[-1].rstrip('0'))
     n = np.round((mz_raw - mono_mz) * abs(z)).astype(int)
