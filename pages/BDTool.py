@@ -72,13 +72,6 @@ def boltzmann_equation(x, bottom, top, v50, slope):
     """Boltzmann sigmoidal equation"""
     return bottom + (top - bottom) / (1 + np.exp((v50 - x) / slope))
 
-def modified_boltzmann(x, bottom, top, v50, slope):
-    """Modified Boltzmann equation with intuitive slope parameter"""
-    range_val = top - bottom
-    if range_val == 0: # Avoid division by zero
-        return np.full_like(x, bottom)
-    return bottom + range_val / (1 + np.exp(4 * slope * (v50 - x) / range_val))
-
 def statistical_sigmoid(x, bottom, top, v50, slope):
     """Sigmoid statistique simple (équation de Hill adaptée)"""
     return bottom + (top - bottom) / (1 + np.exp(slope * (v50 - x)))
@@ -128,17 +121,6 @@ def fit_sigmoid_curve(voltages, survival_yield, method="Hill"):
             v50 = popt[2] # v50 parameter
             param_names = ['Bottom', 'Top', 'V50', 'Slope']
 
-        elif method == "Modified Boltzmann":
-            # Initial guess: [bottom, top, v50, slope]
-            slope_guess = 0.01 # smaller for modified version
-            initial_guess = [y_min, y_max, v_mid, slope_guess]
-            bounds = ([0, 0, np.min(voltages_clean), -1],
-                     [1, 1, np.max(voltages_clean), 1])
-            popt, pcov = curve_fit(modified_boltzmann, voltages_clean, survival_clean,
-                                 p0=initial_guess, bounds=bounds, maxfev=5000)
-            v50 = popt[2] # v50 parameter
-            param_names = ['Bottom', 'Top', 'V50', 'Slope']
-
         elif method == "Statistical Sigmoid":
             # Initial guess: [bottom, top, v50, slope]
             slope_guess = 1.0
@@ -158,8 +140,6 @@ def fit_sigmoid_curve(voltages, survival_yield, method="Hill"):
             y_pred = hill_equation(voltages_clean, *popt)
         elif method == "Boltzmann":
             y_pred = boltzmann_equation(voltages_clean, *popt)
-        elif method == "Modified Boltzmann":
-            y_pred = modified_boltzmann(voltages_clean, *popt)
         elif method == "Statistical Sigmoid":
             y_pred = statistical_sigmoid(voltages_clean, *popt)
 
@@ -227,8 +207,6 @@ def plot_sigmoid_fit(voltages, survival_yield, fit_result):
         y_smooth = hill_equation(v_smooth, *popt)
     elif method == "Boltzmann":
         y_smooth = boltzmann_equation(v_smooth, *popt)
-    elif method == "Modified Boltzmann":
-        y_smooth = modified_boltzmann(v_smooth, *popt)
     elif method == "Statistical Sigmoid":
         y_smooth = statistical_sigmoid(v_smooth, *popt)
 
@@ -599,9 +577,9 @@ if uploaded_file:
         with col1:
             sigmoid_method = st.selectbox(
                 t("Méthode d'ajustement", "Fitting method"),
-                ["Hill", "Boltzmann", "Modified Boltzmann", "Statistical Sigmoid"],
-                help=t("Hill: équation de Hill classique\nBoltzmann: équation de Boltzmann\nModified Boltzmann: Boltzmann modifié\nStatistical Sigmoid: sigmoid statistique simple",
-                      "Hill: classical Hill equation\nBoltzmann: Boltzmann equation\nModified Boltzmann: modified Boltzmann\nStatistical Sigmoid: simple statistical sigmoid")
+                ["Hill", "Boltzmann", "Statistical Sigmoid"],
+                help=t("Hill: équation de Hill classique\nBoltzmann: équation de Boltzmann\nStatistical Sigmoid: sigmoid statistique simple",
+                      "Hill: classical Hill equation\nBoltzmann: Boltzmann equation\nStatistical Sigmoid: simple statistical sigmoid")
             )
 
         with col2:
