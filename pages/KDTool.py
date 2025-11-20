@@ -448,19 +448,7 @@ def main():
         page_icon="🧪",
     )
     st.title("Détermination du KD — Modèles de Hill et Gabelica (Amélioré)")
-    st.markdown(
-        """Cette application intègre les pics MS et ajuste les modèles de Hill et/ou Gabelica pour déterminer le KD.
-
-        **🔧 Version corrigée:** La méthode de Gabelica utilise maintenant l'équation originale (équation 11) qui fitte I(A)/I(AB) avec Ka selon l'article de Gabelica et al. (2003).
-
-        **🆕 Améliorations récentes:**
-
-        - Correction d'erreur d'indentation dans les imports
-        - Les courbes d'ajustement ne sont plus extrapolées vers zéro pour éviter les asymptotes problématiques
-        - **🎯 Fit Gabelica amélioré:** Limites élargies pour le paramètre R (0.001-1000 au lieu de 0.1-10) et estimation initiale intelligente
-        - **🗂️ NOUVEAU:** Possibilité d'exclure des points suspects (outliers) avant l'ajustement avec session state"""
-    )
-
+    
     # Sidebar — I/O and options
     st.sidebar.header("Paramètres")
     uploaded_file = st.sidebar.file_uploader("Choisir le fichier CSV", type=["csv"])
@@ -468,9 +456,9 @@ def main():
     # Titration type selection
     st.sidebar.subheader("Type de titrage")
     equimolar_titration = st.sidebar.checkbox(
-        "Titrage équimolaire (protéine = ligand)",
+        "Titrage équimolaire (cible = ligand)",
         value=False,
-        help="Cochez si les concentrations de protéine et ligand sont égales (nécessaire pour méthode Gabelica)"
+        help="Cochez si les concentrations de cible et ligand sont égales (nécessaire pour méthode Gabelica)"
     )
 
     # Method selection
@@ -563,8 +551,8 @@ def main():
             col1, col2 = st.columns(2)
 
             with col1:
-                st.write("Pics de la protéine libre (A)")
-                n_rec = st.number_input("Nombre de plages protéine", 1, 5, 1, key="nrec")
+                st.write("Pics de la cible libre (A)")
+                n_rec = st.number_input("Nombre de plages cible", 1, 5, 1, key="nrec")
                 receptor_ranges = []
                 for i in range(n_rec):
                     r1, r2 = st.columns(2)
@@ -593,7 +581,7 @@ def main():
             # ------------------------------------------------------------------
             if st.button("Lancer l'analyse") or st.session_state.analysis_done:
                 if not receptor_ranges or not complex_ranges:
-                    st.error("Définir au moins une plage pour la protéine et une pour le complexe.")
+                    st.error("Définir au moins une plage pour la cible et une pour le complexe.")
                     return
 
                 # Only do integration if not already done or if button is pressed
@@ -727,11 +715,11 @@ def main():
                             # Interpretation of response factor
                             st.write("**Interprétation du facteur de réponse (Hill):**")
                             if Rmax_h > 1.2:
-                                st.info(f"Le complexe AB s'ionise {Rmax_h:.1f}× mieux que la protéine libre A")
+                                st.info(f"Le complexe AB s'ionise {Rmax_h:.1f}× mieux que la cible libre A")
                             elif Rmax_h < 0.8:
-                                st.info(f"La protéine libre A s'ionise {1/Rmax_h:.1f}× mieux que le complexe AB")
+                                st.info(f"La cible libre A s'ionise {1/Rmax_h:.1f}× mieux que le complexe AB")
                             else:
-                                st.info("Les facteurs de réponse du complexe et de la protéine libre sont similaires")
+                                st.info("Les facteurs de réponse du complexe et de la cible libre sont similaires")
                         else:
                             st.error("Échec de l'ajustement du modèle de Hill")
 
@@ -791,11 +779,11 @@ def main():
                                 # Interpretation of response factor
                                 st.write("**Interprétation du facteur de réponse (Gabelica):**")
                                 if R_g > 1.2:
-                                    st.info(f"Le complexe AB répond {R_g:.1f}× mieux que la protéine libre A (facteur de réponse)")
+                                    st.info(f"Le complexe AB répond {R_g:.1f}× mieux que la cible libre A (facteur de réponse)")
                                 elif R_g < 0.8:
-                                    st.info(f"La protéine libre A répond {1/R_g:.1f}× mieux que le complexe AB")
+                                    st.info(f"La cible libre A répond {1/R_g:.1f}× mieux que le complexe AB")
                                 else:
-                                    st.info("Les facteurs de réponse du complexe et de la protéine libre sont similaires")
+                                    st.info("Les facteurs de réponse du complexe et de la cible libre sont similaires")
 
                                 st.info("ℹ️ **Note:** Cette version améliorée utilise des limites élargies pour R (0.001-1000 au lieu de 0.1-10) et une estimation initiale intelligente.")
                             else:
@@ -1037,10 +1025,10 @@ def main():
             """
             ## Instructions
 
-            - **Type de titrage** : Cochez "Titrage équimolaire" si protéine et ligand ont les mêmes concentrations
+            - **Type de titrage** : Cochez "Titrage équimolaire" si cible et ligand ont les mêmes concentrations
             - **Méthodes** : Choisissez Hill et/ou Gabelica (Gabelica nécessite un titrage équimolaire)
             - **Fichier CSV** : ligne 1 réplicats, ligne 2 concentrations, puis colonnes m/z et intensité
-            - **Plages m/z** : Définissez les plages pour la protéine (A) et le complexe (AB)
+            - **Plages m/z** : Définissez les plages pour la cible (A) et le complexe (AB)
             - **Analyse** : Cliquez **Lancer l'analyse** pour intégrer, ajuster et visualiser les modèles
             - **🗂️ Exclusion d'outliers** : Après l'analyse, utilisez la sidebar pour exclure des points suspects
 
@@ -1054,32 +1042,11 @@ def main():
             **Méthode de Gabelica (améliorée) :** Méthode spécialisée pour titrages équimolaires (Gabelica et al., 2003)
             - Paramètres : KD (converti de Ka), facteur de réponse (R)
             - Corrige explicitement les différences de facteurs de réponse entre espèces libres et complexées
-            - Nécessite un titrage équimolaire [Protéine] = [Ligand]
+            - Nécessite un titrage équimolaire [cible] = [Ligand]
             - **Utilise l'équation originale 11 :** I(A)/I(AB) = (1 + √(1 + 4×Ka×C₀)) / (2×R×Ka×C₀)
             - Fitte : I(A)/I(AB) vs concentration avec Ka, puis convertit en Kd = 1/Ka
 
-            ### Améliorations dans cette version
-
-            🔧 **Corrections antérieures :**
-            - Utilise maintenant l'équation 11 originale de l'article
-            - Fitte I(A)/I(AB) (substrat libre / complexe) au lieu de I(AB)/I(A)
-            - Utilise Ka (constante d'association) dans le fit, puis convertit en Kd
-            - Correction d'erreur d'indentation dans les imports
-            - Les courbes d'ajustement ne sont plus extrapolées vers zéro
-
-            🎯 **Nouvelles améliorations - Fit Gabelica :**
-            - **Limites élargies pour R :** 0.001-1000 au lieu de 0.1-10 (évite les contraintes artificielles)
-            - **Estimation initiale intelligente de R :** basée sur le comportement des données
-            - **Diagnostics améliorés :** détection si les paramètres atteignent les limites
-            - **Plus d'itérations :** 50000 au lieu de 20000 pour une convergence optimale
-
-            🗂️ **NOUVEAU - Exclusion d'outliers stable :**
-            - **Session state :** Les données d'intégration sont sauvegardées et ne bougent plus
-            - **Interface stable :** L'option d'exclusion apparaît après l'analyse et reste fixe
-            - **Fit dynamique :** Seuls les fits sont recalculés quand on modifie la sélection des outliers
-            - **Performance optimisée :** L'intégration des pics n'est plus relancée inutilement
-
-            **Le facteur de réponse indique la différence d'efficacité d'ionisation entre le complexe et la protéine libre.**
+            **Le facteur de réponse indique la différence d'efficacité d'ionisation entre le complexe et la cible libre.**
             """
         )
 
