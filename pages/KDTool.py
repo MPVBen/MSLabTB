@@ -901,34 +901,36 @@ def main():
                             st.success("🎯 Le modèle de Hill semble mieux ajuster les données (AIC plus faible)")
                         else:
                             st.info("ℹ️ Les deux méthodes donnent des ajustements similaires")
-        else:
-            st.markdown(
-                """
-                ## Instructions
-                - **Type de titrage** : Cochez "Titrage équimolaire" si cible et ligand ont les mêmes concentrations
-                - **Méthodes** : Choisissez Hill et/ou Gabelica (Gabelica nécessite un titrage équimolaire)
-                - **Fichier CSV** : ligne 1 réplicats, ligne 2 concentrations, puis colonnes m/z et intensité
-                - **Plages m/z** : Définissez les plages pour la cible (A) et le complexe (AB)
-                - **Analyse** : Cliquez **Lancer l'analyse** pour intégrer, ajuster et visualiser les modèles
-                - **🗂️ Exclusion d'outliers** : Après l'analyse, utilisez la sidebar pour exclure des points suspects
-                
-                ### Méthodes disponibles
-                
-                **Modèle de Hill :** Méthode classique avec coopérativité optionnelle
-                - Paramètres : KD, coefficient de Hill (n), facteur de réponse (Rmax)
-                - Option pour fixer n=1 (pas de coopérativité)
-                - Fitte : I(AB)/I(A) vs concentration
-                
-                **Méthode de Gabelica (améliorée) :** Méthode spécialisée pour titrages équimolaires (Gabelica et al., 2003)
-                - Paramètres : KD (converti de Ka), facteur de réponse (R)
-                - Corrige explicitement les différences de facteurs de réponse entre espèces libres et complexées
-                - Nécessite un titrage équimolaire [cible] = [Ligand]
-                - **Utilise l'équation :** I(A)/I(AB) = (1 + √(1 + 4×Ka×C₀)) / (2×R×Ka×C₀)
-                - Fitte : I(A)/I(AB) vs concentration avec Ka, puis convertit en Kd = 1/Ka
-                
-                **Le facteur de réponse indique la différence d'efficacité d'ionisation entre le complexe et la cible libre.**
-                """
-            )
+    
+    else:
+        # INSTRUCTIONS SHOWN WHEN NO FILE IS UPLOADED
+        st.markdown(
+            """
+            ## Instructions
+            - **Type de titrage** : Cochez "Titrage équimolaire" si cible et ligand ont les mêmes concentrations
+            - **Méthodes** : Choisissez Hill et/ou Gabelica (Gabelica nécessite un titrage équimolaire)
+            - **Fichier CSV** : ligne 1 réplicats, ligne 2 concentrations, puis colonnes m/z et intensité
+            - **Plages m/z** : Définissez les plages pour la cible (A) et le complexe (AB)
+            - **Analyse** : Cliquez **Lancer l'analyse** pour intégrer, ajuster et visualiser les modèles
+            - **🗂️ Exclusion d'outliers** : Après l'analyse, utilisez la sidebar pour exclure des points suspects
+            
+            ### Méthodes disponibles
+            
+            **Modèle de Hill :** Méthode classique avec coopérativité optionnelle
+            - Paramètres : KD, coefficient de Hill (n), facteur de réponse (Rmax)
+            - Option pour fixer n=1 (pas de coopérativité)
+            - Fitte : I(AB)/I(A) vs concentration
+            
+            **Méthode de Gabelica (améliorée) :** Méthode spécialisée pour titrages équimolaires (Gabelica et al., 2003)
+            - Paramètres : KD (converti de Ka), facteur de réponse (R)
+            - Corrige explicitement les différences de facteurs de réponse entre espèces libres et complexées
+            - Nécessite un titrage équimolaire [cible] = [Ligand]
+            - **Utilise l'équation :** I(A)/I(AB) = (1 + √(1 + 4×Ka×C₀)) / (2×R×Ka×C₀)
+            - Fitte : I(A)/I(AB) vs concentration avec Ka, puis convertit en Kd = 1/Ka
+            
+            **Le facteur de réponse indique la différence d'efficacité d'ionisation entre le complexe et la cible libre.**
+            """
+        )
 
 # -----------------------------------------------------------------------------
 # Entrypoint
