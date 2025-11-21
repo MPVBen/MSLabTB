@@ -9,6 +9,21 @@ st.markdown("""
         [data-testid="stSidebarNav"] {
             display: none;
         }
+        
+        /* Style personnalisé pour améliorer l'alignement des boutons avec icônes */
+        .stButton button {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            height: 50px;
+            padding: 10px 15px;
+        }
+        
+        /* Améliorer l'alignement des colonnes dans la sidebar */
+        [data-testid="column"] {
+            display: flex;
+            align-items: center;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -17,7 +32,7 @@ ICON_FOLDER = "assets"
 # Correspondance nom logiciel / nom fichier python dans pages/ / icône SVG
 # Ajout d'une page d'accueil en premier
 apps = {
-    "🏠 Accueil": {"module": None, "icon": "TB_logo.svg"},  # None = page d'accueil
+    "🏠 Accueil": {"module": None, "icon": "icone_home.svg"},
     "BDTool": {"module": "BDTool", "icon": "icone_BD.svg"},
     "KDTool": {"module": "KDTool", "icon": "icone_KD.svg"},
     "MassCalc": {"module": "MassCalc", "icon": "icone_MC.svg"},
@@ -31,17 +46,24 @@ if 'page' not in st.session_state:
 
 st.sidebar.title("MS Lab Toolbox")
 
-# Menu avec icônes
+# Menu avec icônes - AMÉLIORATION DE L'ALIGNEMENT
 for app_name, info in apps.items():
     icon_path = os.path.join(ICON_FOLDER, info["icon"])
-    cols = st.sidebar.columns([1, 4], gap="small")
+    
+    # Utilisation de columns avec ratio ajusté et gap
+    cols = st.sidebar.columns([1, 5], gap="medium")
+    
     with cols[0]:
         if os.path.exists(icon_path):
-            st.image(icon_path, width=24)
+            # Taille d'icône augmentée à 40px et centrage
+            st.image(icon_path, width=40)
         else:
-            st.write("❓")
+            # Emoji plus visible en cas d'icône manquante
+            st.markdown("### ❓")
+    
     with cols[1]:
-        if st.button(app_name, key=f"btn_{app_name}"):
+        # Bouton avec une clé unique et use_container_width pour meilleur alignement
+        if st.button(app_name, key=f"btn_{app_name}", use_container_width=True):
             st.session_state.page = app_name
 
 # Affichage du contenu selon la page sélectionnée
@@ -106,7 +128,7 @@ if st.session_state.page == "🏠 Accueil":
         st.markdown("""
         **Version 2.0** (Nov 2025)
         - ✅ Ajout de la page d'accueil avec navigation améliorée
-        - ✅ Menu avec icônes personnalisées
+        - ✅ Menu avec icônes personnalisées agrandies et alignées
         - ✅ Masquage du menu natif Streamlit
         - ✅ Amélioration de l'interface utilisateur
         
