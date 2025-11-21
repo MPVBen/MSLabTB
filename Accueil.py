@@ -65,9 +65,9 @@ if st.session_state.page == "🏠 Accueil":
     ### 📚 Outils disponibles :
     
     - **BDTool** : Visualisation et analyse de courbes de dissociation (breakdown curves)
-    - **KDTool** : Détermination de constantes de dissociation (méthodes Hill & Gabelica)
+    - **KDTool** : Détermination de constantes de dissociation par titrage MS (méthodes Hill & Gabelica)
     - **MassCalc** : Calculateur de masse moléculaire et m/z
-    - **ThermoTool** : Analyse thermodynamique avec ajustements statistiques et gamma
+    - **ThermoTool** : Calculs de température effective avec ajustements statistiques et gamma
     
     ### 🚀 Pour commencer :
     
@@ -127,6 +127,7 @@ if st.session_state.page == "🏠 Accueil":
     ### 📖 Instructions générales :
     
     - **BDTool** et **KDTool** nécessitent des fichiers au format spécifique (téléchargez les templates ci-dessus)
+    - **BDTool** peut également lire les fichiers générés par TWIMExtract (https://sites.lsa.umich.edu/ruotolo/software/twim-extract/)
     - Les résultats peuvent être exportés en Excel, SVG ou PDF selon l'outil
     - Encodage recommandé : UTF-8
     - Pour toute question, contactez l'équipe du laboratoire
@@ -146,7 +147,7 @@ if st.session_state.page == "🏠 Accueil":
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.info("🧪 **Instruments**\n\nTWIM, Orbitrap, Q-TOF, MALDI")
+        st.info("🧪 **Instruments**\n\nIM-MS, Orbitrap, Q-TOF, MALDI")
     
     with col2:
         st.success("📊 **Formats**\n\nCSV, Excel")
@@ -173,8 +174,8 @@ if st.session_state.page == "🏠 Accueil":
         st.markdown("""
         Pour toute question ou problème technique :
         
-        - 📧 Email : mslab@universite.be
-        - 💬 Support : Contactez l'équipe du laboratoire
+        - 📧 Email : M.Benonit@uliege.be (ou B.Cabrera@uliege.be)
+        - 💬 Support : Contactez Maxime (ou Bastien) via teams
         - 📥 Templates : Téléchargez les fichiers exemples ci-dessus
         - 📚 Documentation : Chaque outil contient des instructions détaillées
         """)
