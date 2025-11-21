@@ -16,7 +16,7 @@ ICON_FOLDER = "assets"
 
 # Correspondance nom logiciel / nom fichier python dans pages/ / icône SVG
 apps = {
-    "🏠 Accueil": {"module": None, "icon": "TB_logo.svg"},
+    "🏠 Accueil": {"module": None, "icon": "icone_home.svg"},
     "BDTool": {"module": "BDTool", "icon": "icone_BD.svg"},
     "KDTool": {"module": "KDTool", "icon": "icone_KD.svg"},
     "MassCalc": {"module": "MassCalc", "icon": "icone_MC.svg"},
@@ -30,31 +30,24 @@ if 'page' not in st.session_state:
 
 st.sidebar.title("MS Lab Toolbox")
 
-# Menu avec icônes - ALIGNEMENT PARFAIT
+# Menu avec icônes - AMÉLIORATION DE L'ALIGNEMENT
 for app_name, info in apps.items():
     icon_path = os.path.join(ICON_FOLDER, info["icon"])
     
-    # Créer un conteneur avec colonnes
+    # Créer un conteneur avec colonnes pour l'alignement
     cols = st.sidebar.columns([1, 5], gap="small")
     
     with cols[0]:
-        # Afficher l'icône avec un conteneur HTML pour centrage vertical
+        # Centrage vertical de l'icône avec un conteneur
         if os.path.exists(icon_path):
-            # Wrapper HTML pour aligner verticalement au centre du bouton
-            st.markdown("""
-                <div style="display: flex; align-items: center; justify-content: center; height: 42px;">
-            """, unsafe_allow_html=True)
-            st.image(icon_path, width=44)  # Légèrement plus grand que le bouton
-            st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown('<div style="display: flex; align-items: center; height: 38px;">', unsafe_allow_html=True)
+            st.image(icon_path, width=32)
+            st.markdown('</div>', unsafe_allow_html=True)
         else:
-            st.markdown("""
-                <div style="display: flex; align-items: center; justify-content: center; height: 42px; font-size: 24px;">
-                    ❓
-                </div>
-            """, unsafe_allow_html=True)
+            st.markdown('<div style="display: flex; align-items: center; height: 38px; font-size: 20px;">❓</div>', unsafe_allow_html=True)
     
     with cols[1]:
-        # Bouton avec hauteur cohérente
+        # Bouton avec hauteur fixe pour alignement
         if st.button(app_name, key=f"btn_{app_name}", use_container_width=True):
             st.session_state.page = app_name
 
@@ -120,7 +113,7 @@ if st.session_state.page == "🏠 Accueil":
         st.markdown("""
         **Version 2.0** (Nov 2025)
         - ✅ Ajout de la page d'accueil avec navigation améliorée
-        - ✅ Menu avec icônes personnalisées parfaitement alignées
+        - ✅ Menu avec icônes personnalisées optimisées et alignées
         - ✅ Masquage du menu natif Streamlit
         - ✅ Amélioration de l'interface utilisateur
         
