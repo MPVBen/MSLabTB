@@ -78,7 +78,6 @@ def app():
         'Li⁺': {'add': 'Li', 'remove': 'H', 'charge': 1},
         'H⁺': {'add': 'H', 'remove': None, 'charge': 1},
         'Mg²⁺': {'add': 'Mg', 'remove': 'H2', 'charge': 2},
-        # Pour négatif : 'Cl⁻': {'add': 'Cl', 'remove': None, 'charge': -1},
     }
     ADDUCTS_LIST = list(ADDUCTS.keys())
     
@@ -98,6 +97,16 @@ def app():
         def repl(match):
             return match.group(1) + "<sub>" + match.group(2) + "</sub>"
         return re.sub(r'([A-Z][a-z]?)(\d+)', repl, formula_str)
+    
+    def count_amino_acids(sequence):
+        """Compte le nombre de chaque acide aminé dans une séquence"""
+        from collections import Counter
+        return Counter(sequence.upper())
+    
+    def count_nucleotides(sequence):
+        """Compte le nombre de chaque base nucléique dans une séquence"""
+        from collections import Counter
+        return Counter(sequence.upper())
     
     def calculate_peptide_formula(sequence, mod_counts, nterm_mods):
         total = Formula()
@@ -196,7 +205,6 @@ def app():
                             total -= Formula('H') * (nH * count)
                         else:
                             total -= Formula(adduct_info['remove']) * count
-            # Si charge apportée uniquement par les adduits, ne rien retirer ni ajouter
         elif ion_mode == "Negative":
             protons_to_remove = user_charge + total_adduct_charge
             if protons_to_remove > 0:
@@ -350,8 +358,8 @@ def app():
         formula_html = formula_to_html(formula.formula)
         nH_final = count_protons(formula)
         if nH_final < 0:
-            st.warning(f"⚠️ Trop de protons retirés : la formule finale contient {nH_final} hydrogènes (négatif) !")
-        st.markdown(f"**Formule brute :** <span style='font-size:1.3em'>{formula_html}</span>", unsafe_allow_html=True)
+            st.warning(f"⚠️ Trop de protons retirés : la formule finale contient {nH_final} hydrogènes (négatif) !")
+        st.markdown(f"**Formule brute :** <span style='font-size:1.3em'>{formula_html}</span>", unsafe_allow_html=True)
         st.subheader(f"Masse exacte (monoisotopique) : {formula.isotope.mass:.8f} Da")
         st.subheader(f"Masse moyenne : {formula.mass:.8f} Da")
     
@@ -386,6 +394,16 @@ def app():
             st.session_state["warn_input"] = False
         if seq_pep:
             try:
+                # Afficher le compteur d'acides aminés
+                st.info(f"📊 **Longueur de la séquence :** {len(seq_pep)} acides aminés")
+                aa_counts = count_amino_acids(seq_pep)
+                
+                # Afficher le décompte sous forme de tableau
+                with st.expander("🔍 Détail de la composition en acides aminés"):
+                    aa_df = pd.DataFrame(list(aa_counts.items()), columns=['Acide aminé', 'Nombre'])
+                    aa_df = aa_df.sort_values('Acide aminé')
+                    st.dataframe(aa_df, use_container_width=True, hide_index=True)
+                
                 current_formula = calculate_peptide_formula(seq_pep, peptide_mod_counts, peptide_nterm_mods)
                 if simulate_ms and (any(adduct_counts.values()) or charge > 0):
                     current_formula = apply_adducts_and_charge(current_formula, adduct_counts, ion_mode, charge)
@@ -408,6 +426,16 @@ def app():
             st.session_state["warn_input"] = False
         if seq_nuc:
             try:
+                # Afficher le compteur de bases nucléiques
+                st.info(f"📊 **Longueur de la séquence :** {len(seq_nuc)} bases")
+                base_counts = count_nucleotides(seq_nuc)
+                
+                # Afficher le décompte sous forme de tableau
+                with st.expander(f"🔍 Détail de la composition en bases ({nucleic_type})"):
+                    base_df = pd.DataFrame(list(base_counts.items()), columns=['Base', 'Nombre'])
+                    base_df = base_df.sort_values('Base')
+                    st.dataframe(base_df, use_container_width=True, hide_index=True)
+                
                 current_formula = calculate_nucleic_formula(
                     seq_nuc, nucleic_mod_counts, nucleic_type, term_5, term_3, PS
                 )
@@ -477,16 +505,17 @@ def app():
     
     with st.expander("Aide & Astuces"):
         st.markdown("""
-    - **Case à cocher pour activer/désactiver la simulation MS (charges, adduits, distribution isotopique)**.
-    - **Si décochée, seule la masse exacte/moyenne de la molécule neutre est affichée.**
-    - **Champs réinitialisés automatiquement dès que tu modifies un champ.**
-    - **Caractères invalides et espaces supprimés automatiquement.**
-    - **Formule brute affichée avec indices chimiques.**
-    - **Terminaisons 5'/3' personnalisables pour les acides nucléiques (OH, phosphate, phosphate cyclique).**
-    - **Formule brute des acides nucléiques corrigée (nucléosides, squelette, H/O, terminaisons).**
-    - **Pics gaussiens** : largeur calculée automatiquement à partir de la résolution instrumentale (R) et de la charge.
-    - **Si la résolution effective est insuffisante, les pics isotopiques ne seront pas séparés (avertissement affiché).**
-    - **Export CSV/SVG** : toutes les données isotopiques et le graphique sont exportables.
-    - **Adduits** : possibilité d'ajouter plusieurs adduits (Na⁺, K⁺, Mg²⁺, etc.) et de spécifier leur nombre, avec correction automatique des protons et limitation stricte à la charge totale.
-    - **Le nombre de protons (H) est automatiquement ajusté selon la charge sélectionnée, même sans adduit, pour simuler [M+zH]^z+ ou [M–zH]^z–.
-        """)
+- **Case à cocher pour activer/désactiver la simulation MS (charges, adduits, distribution isotopique)**.
+- **Si décochée, seule la masse exacte/moyenne de la molécule neutre est affichée.**
+- **Compteur automatique du nombre d'acides aminés (peptides) et de bases (acides nucléiques)** avec détail de la composition.
+- **Champs réinitialisés automatiquement dès que tu modifies un champ.**
+- **Caractères invalides et espaces supprimés automatiquement.**
+- **Formule brute affichée avec indices chimiques.**
+- **Terminaisons 5'/3' personnalisables pour les acides nucléiques (OH, phosphate, phosphate cyclique).**
+- **Formule brute des acides nucléiques corrigée (nucléosides, squelette, H/O, terminaisons).**
+- **Pics gaussiens** : largeur calculée automatiquement à partir de la résolution instrumentale (R) et de la charge.
+- **Si la résolution effective est insuffisante, les pics isotopiques ne seront pas séparés (avertissement affiché).**
+- **Export CSV/SVG** : toutes les données isotopiques et le graphique sont exportables.
+- **Adduits** : possibilité d'ajouter plusieurs adduits (Na⁺, K⁺, Mg²⁺, etc.) et de spécifier leur nombre, avec correction automatique des protons et limitation stricte à la charge totale.
+- **Le nombre de protons (H) est automatiquement ajusté selon la charge sélectionnée, même sans adduit, pour simuler [M+zH]^z+ ou [M–zH]^z–.
+    """)
