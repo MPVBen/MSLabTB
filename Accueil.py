@@ -158,13 +158,13 @@ if st.session_state.page == "🏠 Accueil":
     # Section optionnelle : Changelog ou actualités
     with st.expander("📋 Dernières mises à jour"):
         st.markdown("""
-        **Version 2.0** (Nov 2025)
+        **Version beta 25w58b** (Nov 2025)
         - ✅ Ajout des templates Excel téléchargeables
         - ✅ Page d'accueil avec navigation améliorée
         - ✅ Menu avec icônes personnalisées
         - ✅ Masquage du menu natif Streamlit
         
-        **Version 1.5** (Oct 2025)
+        **Version beta 25w57a** (Oct 2025)
         - ✨ Ajout de ThermoTool gamma incomplete fit
         - 🐛 Corrections diverses sur KDTool
         """)
