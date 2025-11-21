@@ -21,7 +21,7 @@ apps = {
     "KDTool": {"module": "KDTool", "icon": "icone_KD.svg"},
     "ThermoTool statistic fit": {"module": "ThermoTool_statistic_fit", "icon": "icone_TT.svg"},
     "ThermoTool gamma incomplete fit": {"module": "ThermoTool_gamma_incomplete_fit", "icon": "icone_TT.svg"},
-    "LabCalc": {"module": "LabCalc", "icon": "none"},
+    "LabCalc": {"module": "LabCalc", "icon": "icone_LC.svg"},
 }
 
 # Initialisation sur la page d'accueil par défaut
