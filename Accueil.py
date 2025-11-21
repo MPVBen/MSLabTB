@@ -16,11 +16,12 @@ ICON_FOLDER = "assets"
 # Correspondance nom logiciel / nom fichier python dans pages/ / icône SVG
 apps = {
     "🏠 Accueil": {"module": None, "icon": "TB_logo.svg"},
+    "MassCalc": {"module": "MassCalc", "icon": "icone_MC.svg"},
     "BDTool": {"module": "BDTool", "icon": "icone_BD.svg"},
     "KDTool": {"module": "KDTool", "icon": "icone_KD.svg"},
-    "MassCalc": {"module": "MassCalc", "icon": "icone_MC.svg"},
     "ThermoTool statistic fit": {"module": "ThermoTool_statistic_fit", "icon": "icone_TT.svg"},
     "ThermoTool gamma incomplete fit": {"module": "ThermoTool_gamma_incomplete_fit", "icon": "icone_TT.svg"},
+    "LabCalc": {"module": "LabCalc", "icon": "none"},
 }
 
 # Initialisation sur la page d'accueil par défaut
