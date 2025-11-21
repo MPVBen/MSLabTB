@@ -30,11 +30,10 @@ if 'page' not in st.session_state:
 st.sidebar.title("MS Lab Toolbox")
 st.sidebar.markdown("---")
 
-# Menu avec icônes - VERSION SIMPLE ET FONCTIONNELLE
+# Menu avec icônes
 for app_name, info in apps.items():
     icon_path = os.path.join(ICON_FOLDER, info["icon"])
     
-    # Utiliser des colonnes avec un bon ratio
     col1, col2 = st.sidebar.columns([0.2, 0.8])
     
     with col1:
@@ -75,23 +74,72 @@ if st.session_state.page == "🏠 Accueil":
     1. Sélectionnez un outil dans le menu de gauche
     2. Suivez les instructions spécifiques à chaque outil
     3. Téléchargez vos résultats en fin d'analyse
+    """)
     
+    # ============================================================================
+    # SECTION TÉLÉCHARGEMENT DE TEMPLATES
+    # ============================================================================
+    st.markdown("---")
+    st.subheader("📥 Templates Excel")
+    st.markdown("Téléchargez les fichiers templates pour faciliter l'utilisation des outils :")
+    
+    # Création des colonnes pour les templates
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("**📊 Template BDTool**")
+        st.caption("Format pour les courbes de dissociation (breakdown curves)")
+        
+        # Lire le fichier template existant
+        template_bd_path = "templates/Template_BD.xlsx"
+        if os.path.exists(template_bd_path):
+            with open(template_bd_path, "rb") as file:
+                st.download_button(
+                    label="⬇️ Télécharger Template_BD.xlsx",
+                    data=file,
+                    file_name="Template_BD.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+        else:
+            st.warning("⚠️ Template non trouvé. Placez Template_BD.xlsx dans le dossier 'templates/'")
+    
+    with col2:
+        st.markdown("**🧪 Template KDTool**")
+        st.caption("Format pour la détermination de KD (titration)")
+        
+        # Lire le fichier template existant
+        template_kd_path = "templates/Template_KD.xlsx"
+        if os.path.exists(template_kd_path):
+            with open(template_kd_path, "rb") as file:
+                st.download_button(
+                    label="⬇️ Télécharger Template_KD.xlsx",
+                    data=file,
+                    file_name="Template_KD.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+        else:
+            st.warning("⚠️ Template non trouvé. Placez Template_KD.xlsx dans le dossier 'templates/'")
+    
+    st.markdown("---")
+    
+    # Suite de la page d'accueil
+    st.markdown("""
     ### 📖 Instructions générales :
     
-    - Les fichiers CSV doivent respecter le format indiqué dans chaque outil
+    - **BDTool** et **KDTool** nécessitent des fichiers au format spécifique (téléchargez les templates ci-dessus)
     - Les résultats peuvent être exportés en Excel, SVG ou PDF selon l'outil
     - Encodage recommandé : UTF-8
     - Pour toute question, contactez l'équipe du laboratoire
     
     ### ⚙️ Configuration :
     
-    - **Formats supportés** : CSV, Excel, TXT
+    - **Formats supportés** : CSV, Excel
     - **Langues disponibles** : Français / English (selon l'outil)
     - **Instruments** : Compatibilité avec la plupart des spectromètres de masse
     
     ---
     
-    💡 **Astuce** : Certains outils proposent des exemples de données pour vous familiariser avec les fonctionnalités.
+    💡 **Astuce** : Téléchargez les templates ci-dessus et remplissez-les avec vos données pour démarrer rapidement !
     """)
     
     # Section avec colonnes d'information
@@ -101,7 +149,7 @@ if st.session_state.page == "🏠 Accueil":
         st.info("🧪 **Instruments**\n\nTWIM, Orbitrap, Q-TOF, MALDI")
     
     with col2:
-        st.success("📊 **Formats**\n\nCSV, Excel, TXT, SVG")
+        st.success("📊 **Formats**\n\nCSV, Excel")
     
     with col3:
         st.warning("🔄 **Version**\n\n2.0 - Novembre 2025")
@@ -110,10 +158,10 @@ if st.session_state.page == "🏠 Accueil":
     with st.expander("📋 Dernières mises à jour"):
         st.markdown("""
         **Version 2.0** (Nov 2025)
-        - ✅ Ajout de la page d'accueil avec navigation améliorée
+        - ✅ Ajout des templates Excel téléchargeables
+        - ✅ Page d'accueil avec navigation améliorée
         - ✅ Menu avec icônes personnalisées
         - ✅ Masquage du menu natif Streamlit
-        - ✅ Amélioration de l'interface utilisateur
         
         **Version 1.5** (Oct 2025)
         - ✨ Ajout de ThermoTool gamma incomplete fit
@@ -127,7 +175,8 @@ if st.session_state.page == "🏠 Accueil":
         
         - 📧 Email : mslab@universite.be
         - 💬 Support : Contactez l'équipe du laboratoire
-        - 📚 Documentation : Consultez les manuels de chaque outil
+        - 📥 Templates : Téléchargez les fichiers exemples ci-dessus
+        - 📚 Documentation : Chaque outil contient des instructions détaillées
         """)
 
 else:
@@ -150,7 +199,6 @@ else:
         - Tous les imports nécessaires sont présents
         """)
         
-        # Afficher plus de détails en mode debug
         with st.expander("🔍 Détails de l'erreur (debug)"):
             import traceback
             st.code(traceback.format_exc())
