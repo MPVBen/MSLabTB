@@ -1,30 +1,38 @@
 import streamlit as st
+import os
 
-# Chemins vers vos icônes SVG (mettez vos propres fichiers dans un dossier 'assets')
-icons = {
-    "Accueil": "assets/TB_logo.svg",
-    "BDTool": "assets/icone_BD.svg",
-    "KDTool": "assets/icone_KD.svg",
-    "MassCalc": "assets/icone_MC.svg",
-    "ThermoTool logistic fit": "assets/icone_TT.svg",
-    "ThermoTool gamma incomplete fit": "assets/icone_TT.svg",
+# Dictionnaire : nom page -> icône (SVG dans assets) + fonction d'affichage
+pages = {
+    "Accueil": {"icon": "assets/TB_logo.svg", "page": "pages/Accueil.py"},
+    "BDTool": {"icon": "assets/icone_BD.svg", "page": "pages/BDTool.py"},
+    "KDTool": {"icon": "assets/icone_KD.svg", "page": "pages/KDTool.py"},
+    "MassCalc": {"icon": "assets/icone_MC.svg", "page": "pages/MassCalc.py"},
+    "ThermoTool logistic fit": {"icon": "assets/icone_TT.svg", "page": "pages/ThermoTool_statistic_fit.py"},
+    "ThermoTool gamma incomplete fit": {"icon": "assets/icone_TT.svg", "page": "pages/ThermoTool_gamma_incomplete_fit.py"},
 }
 
-# Initialisation de la sélection
 if 'page' not in st.session_state:
     st.session_state.page = "Accueil"
 
 st.sidebar.title("Menu")
 
-# Affichage du menu avec icônes SVG
-for page, icon_path in icons.items():
-    # Affiche l’icône + label avec un bouton
-    col1, col2 = st.sidebar.columns([1, 4], gap="small")
-    with col1:
+def page_button(name, icon_path):
+    cols = st.sidebar.columns([1, 4], gap="small")
+    with cols[0]:
         st.image(icon_path, width=24)
-    with col2:
-        if st.sidebar.button(page):
-            st.session_state.page = page
+    with cols[1]:
+        if st.button(name):
+            st.session_state.page = name
 
-# Affichage de la page sélectionnée
-st.write(f"Vous êtes sur la page : **{st.session_state.page}**")
+for page_name, page_info in pages.items():
+    if os.path.exists(page_info["icon"]):
+        page_button(page_name, page_info["icon"])
+    else:
+        st.sidebar.write(f"(Icone manquante: {page_name})")
+
+# Charge la page choisie via st.experimental_get_pages (Streamlit multipage)
+# Streamlit multi-page app gère le changement automatiquement si structure pages/
+st.write(f"Page sélectionnée : **{st.session_state.page}**")
+
+# Optionnel: pour exécuter dynamiquement une page (si app 1 fichier)
+# else laissez Streamlit multipage gérer automatiquement
