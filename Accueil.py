@@ -32,7 +32,7 @@ ICON_FOLDER = "assets"
 # Correspondance nom logiciel / nom fichier python dans pages/ / icône SVG
 # Ajout d'une page d'accueil en premier
 apps = {
-    "🏠 Accueil": {"module": None, "icon": "icone_home.svg"},
+    "🏠 Accueil": {"module": None, "icon": "TB_logo.svg"},
     "BDTool": {"module": "BDTool", "icon": "icone_BD.svg"},
     "KDTool": {"module": "KDTool", "icon": "icone_KD.svg"},
     "MassCalc": {"module": "MassCalc", "icon": "icone_MC.svg"},
