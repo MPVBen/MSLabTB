@@ -39,7 +39,7 @@ for app_name, info in apps.items():
     
     with col1:
         if os.path.exists(icon_path):
-            st.image(icon_path, width=44)
+            st.image(icon_path, width=38)
         else:
             st.write("❓")
     
