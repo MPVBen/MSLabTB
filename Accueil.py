@@ -5,7 +5,6 @@ import importlib
 # Cacher le menu de navigation natif Streamlit
 st.markdown("""
     <style>
-        /* Cacher le menu de navigation par défaut */
         [data-testid="stSidebarNav"] {
             display: none;
         }
@@ -29,63 +28,32 @@ if 'page' not in st.session_state:
     st.session_state.page = "🏠 Accueil"
 
 st.sidebar.title("MS Lab Toolbox")
+st.sidebar.markdown("---")
 
-# Menu avec icônes - VERSION AVEC BOUTONS HTML PERSONNALISÉS
+# Menu avec icônes - VERSION SIMPLE ET FONCTIONNELLE
 for app_name, info in apps.items():
     icon_path = os.path.join(ICON_FOLDER, info["icon"])
     
-    # Créer un conteneur cliquable en HTML
-    is_active = st.session_state.page == app_name
+    # Utiliser des colonnes avec un bon ratio
+    col1, col2 = st.sidebar.columns([0.2, 0.8])
     
-    # Lire l'icône et l'encoder en base64 pour l'inclure dans le HTML
-    icon_html = ""
-    if os.path.exists(icon_path):
-        with open(icon_path, 'rb') as f:
-            import base64
-            icon_data = base64.b64encode(f.read()).decode()
-            icon_html = f'<img src="data:image/svg+xml;base64,{icon_data}" width="36" height="36" style="display: block;">'
-    else:
-        icon_html = '<div style="font-size: 24px;">❓</div>'
+    with col1:
+        if os.path.exists(icon_path):
+            st.image(icon_path, width=38)
+        else:
+            st.write("❓")
     
-    # Créer un bouton HTML personnalisé avec alignement parfait
-    button_style = """
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 10px 12px;
-        border-radius: 8px;
-        background: """ + ('#e0f2fe' if is_active else 'transparent') + """;
-        border: 1px solid """ + ('#0284c7' if is_active else 'transparent') + """;
-        cursor: pointer;
-        transition: all 0.2s;
-        margin-bottom: 4px;
-        text-decoration: none;
-        color: inherit;
-    """
-    
-    button_html = f"""
-        <div style="{button_style}" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='{'#e0f2fe' if is_active else 'transparent'}'">
-            <div style="flex-shrink: 0; display: flex; align-items: center; justify-content: center;">
-                {icon_html}
-            </div>
-            <div style="flex: 1; font-size: 14px; font-weight: {'600' if is_active else '400'};">
-                {app_name}
-            </div>
-        </div>
-    """
-    
-    # Afficher le bouton et gérer le clic
-    if st.sidebar.button(f"select_{app_name}", key=f"btn_{app_name}", label_visibility="collapsed"):
-        st.session_state.page = app_name
-        st.rerun()
-    
-    # Afficher le bouton HTML au-dessus du bouton invisible Streamlit
-    st.sidebar.markdown(button_html, unsafe_allow_html=True)
-    st.sidebar.markdown("<div style='margin-top: -50px;'></div>", unsafe_allow_html=True)
+    with col2:
+        if st.button(app_name, key=f"btn_{app_name}", use_container_width=True):
+            st.session_state.page = app_name
+
+st.sidebar.markdown("---")
 
 # Affichage du contenu selon la page sélectionnée
 if st.session_state.page == "🏠 Accueil":
+    # ============================================================================
     # PAGE D'ACCUEIL
+    # ============================================================================
     st.image("images/MSTB.png", width=200)
     st.title("🔬 MS Lab Toolbox")
     st.markdown("---")
@@ -126,6 +94,7 @@ if st.session_state.page == "🏠 Accueil":
     💡 **Astuce** : Certains outils proposent des exemples de données pour vous familiariser avec les fonctionnalités.
     """)
     
+    # Section avec colonnes d'information
     col1, col2, col3 = st.columns(3)
     
     with col1:
@@ -137,15 +106,34 @@ if st.session_state.page == "🏠 Accueil":
     with col3:
         st.warning("🔄 **Version**\n\n2.0 - Novembre 2025")
     
+    # Section optionnelle : Changelog ou actualités
     with st.expander("📋 Dernières mises à jour"):
         st.markdown("""
         **Version 2.0** (Nov 2025)
-        - ✅ Navigation optimale avec icônes alignées
-        - ✅ Interface améliorée
+        - ✅ Ajout de la page d'accueil avec navigation améliorée
+        - ✅ Menu avec icônes personnalisées
+        - ✅ Masquage du menu natif Streamlit
+        - ✅ Amélioration de l'interface utilisateur
+        
+        **Version 1.5** (Oct 2025)
+        - ✨ Ajout de ThermoTool gamma incomplete fit
+        - 🐛 Corrections diverses sur KDTool
+        """)
+    
+    # Section contact ou aide
+    with st.expander("❓ Besoin d'aide ?"):
+        st.markdown("""
+        Pour toute question ou problème technique :
+        
+        - 📧 Email : mslab@universite.be
+        - 💬 Support : Contactez l'équipe du laboratoire
+        - 📚 Documentation : Consultez les manuels de chaque outil
         """)
 
 else:
+    # ============================================================================
     # CHARGEMENT DYNAMIQUE DES AUTRES PAGES
+    # ============================================================================
     try:
         module_name = apps[st.session_state.page]['module']
         if module_name:
@@ -154,4 +142,15 @@ else:
         else:
             st.error("Module non défini pour cette page")
     except Exception as e:
-        st.error(f"❌ Erreur : {e}")
+        st.error(f"❌ Erreur lors du chargement de l'application : {e}")
+        st.info("💡 Vérifiez que :")
+        st.markdown("""
+        - Le fichier existe dans le dossier `pages/`
+        - Le fichier contient une fonction `app()`
+        - Tous les imports nécessaires sont présents
+        """)
+        
+        # Afficher plus de détails en mode debug
+        with st.expander("🔍 Détails de l'erreur (debug)"):
+            import traceback
+            st.code(traceback.format_exc())
