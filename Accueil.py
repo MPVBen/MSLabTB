@@ -9,28 +9,12 @@ st.markdown("""
         [data-testid="stSidebarNav"] {
             display: none;
         }
-        
-        /* Style personnalisé pour améliorer l'alignement des boutons avec icônes */
-        .stButton button {
-            display: flex;
-            align-items: center;
-            justify-content: flex-start;
-            height: 50px;
-            padding: 10px 15px;
-        }
-        
-        /* Améliorer l'alignement des colonnes dans la sidebar */
-        [data-testid="column"] {
-            display: flex;
-            align-items: center;
-        }
     </style>
 """, unsafe_allow_html=True)
 
 ICON_FOLDER = "assets"
 
 # Correspondance nom logiciel / nom fichier python dans pages/ / icône SVG
-# Ajout d'une page d'accueil en premier
 apps = {
     "🏠 Accueil": {"module": None, "icon": "TB_logo.svg"},
     "BDTool": {"module": "BDTool", "icon": "icone_BD.svg"},
@@ -50,19 +34,20 @@ st.sidebar.title("MS Lab Toolbox")
 for app_name, info in apps.items():
     icon_path = os.path.join(ICON_FOLDER, info["icon"])
     
-    # Utilisation de columns avec ratio ajusté et gap
-    cols = st.sidebar.columns([1, 5], gap="medium")
+    # Créer un conteneur avec colonnes pour l'alignement
+    cols = st.sidebar.columns([1, 5], gap="small")
     
     with cols[0]:
+        # Centrage vertical de l'icône avec un conteneur
         if os.path.exists(icon_path):
-            # Taille d'icône augmentée à 40px et centrage
-            st.image(icon_path, width=40)
+            st.markdown('<div style="display: flex; align-items: center; height: 38px;">', unsafe_allow_html=True)
+            st.image(icon_path, width=32)
+            st.markdown('</div>', unsafe_allow_html=True)
         else:
-            # Emoji plus visible en cas d'icône manquante
-            st.markdown("### ❓")
+            st.markdown('<div style="display: flex; align-items: center; height: 38px; font-size: 20px;">❓</div>', unsafe_allow_html=True)
     
     with cols[1]:
-        # Bouton avec une clé unique et use_container_width pour meilleur alignement
+        # Bouton avec hauteur fixe pour alignement
         if st.button(app_name, key=f"btn_{app_name}", use_container_width=True):
             st.session_state.page = app_name
 
@@ -128,7 +113,7 @@ if st.session_state.page == "🏠 Accueil":
         st.markdown("""
         **Version 2.0** (Nov 2025)
         - ✅ Ajout de la page d'accueil avec navigation améliorée
-        - ✅ Menu avec icônes personnalisées agrandies et alignées
+        - ✅ Menu avec icônes personnalisées optimisées et alignées
         - ✅ Masquage du menu natif Streamlit
         - ✅ Amélioration de l'interface utilisateur
         
@@ -155,7 +140,7 @@ else:
         module_name = apps[st.session_state.page]['module']
         if module_name:
             mod = importlib.import_module(f"pages.{module_name}")
-            mod.app()  # Appel de la fonction app() du module
+            mod.app()
         else:
             st.error("Module non défini pour cette page")
     except Exception as e:
