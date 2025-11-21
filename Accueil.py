@@ -1,38 +1,42 @@
 import streamlit as st
 import os
+import importlib
 
-# Dictionnaire : nom page -> icône (SVG dans assets) + fonction d'affichage
-pages = {
-    "Accueil": {"icon": "assets/TB_logo.svg", "page": "pages/Accueil.py"},
-    "BDTool": {"icon": "assets/icone_BD.svg", "page": "pages/BDTool.py"},
-    "KDTool": {"icon": "assets/icone_KD.svg", "page": "pages/KDTool.py"},
-    "MassCalc": {"icon": "assets/icone_MC.svg", "page": "pages/MassCalc.py"},
-    "ThermoTool logistic fit": {"icon": "assets/icone_TT.svg", "page": "pages/ThermoTool_statistic_fit.py"},
-    "ThermoTool gamma incomplete fit": {"icon": "assets/icone_TT.svg", "page": "pages/ThermoTool_gamma_incomplete_fit.py"},
+ICON_FOLDER = "assets"
+# Correspondance nom logiciel / nom fichier python dans pages/ / icône SVG
+apps = {
+    "BDTool": {"module": "BDTool", "icon": "icone_BD.svg"},
+    "KDTool": {"module": "KDTool", "icon": "icone_KD.svg"},
+    "MassCalc": {"module": "MassCalc", "icon": "icone_MC.svg"},
+    "ThermoTool statistic fit": {"module": "ThermoTool_statistic_fit", "icon": "icone_TT.svg"},
+    "ThermoTool gamma incomplete fit": {"module": "ThermoTool_gamma_incomplete_fit", "icon": "icone_TT.svg"},
+    # Ajoutez vos apps ici suivant la structure pages/vos_fichiers.py
 }
 
+# Initial page
 if 'page' not in st.session_state:
-    st.session_state.page = "Accueil"
+    st.session_state.page = list(apps.keys())[0]
 
-st.sidebar.title("Menu")
+st.sidebar.title("MS Lab Toolbox")
 
-def page_button(name, icon_path):
+for app_name, info in apps.items():
+    icon_path = os.path.join(ICON_FOLDER, info["icon"])
     cols = st.sidebar.columns([1, 4], gap="small")
     with cols[0]:
-        st.image(icon_path, width=24)
+        if os.path.exists(icon_path):
+            st.image(icon_path, width=24)
+        else:
+            st.write("❓")
     with cols[1]:
-        if st.button(name):
-            st.session_state.page = name
+        if st.button(app_name):
+            st.session_state.page = app_name
 
-for page_name, page_info in pages.items():
-    if os.path.exists(page_info["icon"]):
-        page_button(page_name, page_info["icon"])
-    else:
-        st.sidebar.write(f"(Icone manquante: {page_name})")
+st.title(f"Application : {st.session_state.page}")
 
-# Charge la page choisie via st.experimental_get_pages (Streamlit multipage)
-# Streamlit multi-page app gère le changement automatiquement si structure pages/
-st.write(f"Page sélectionnée : **{st.session_state.page}**")
-
-# Optionnel: pour exécuter dynamiquement une page (si app 1 fichier)
-# else laissez Streamlit multipage gérer automatiquement
+# Import dynamique du module de l'app sélectionnée
+try:
+    module_name = f"pages.{apps[st.session_state.page]['module']}"
+    mod = importlib.import_module(module_name)
+    mod.app()  # Supposant que chaque page a une fonction app() qui lance l'app
+except Exception as e:
+    st.error(f"Erreur chargement app : {e}")
