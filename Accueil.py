@@ -16,7 +16,7 @@ ICON_FOLDER = "assets"
 
 # Correspondance nom logiciel / nom fichier python dans pages/ / icône SVG
 apps = {
-    "🏠 Accueil": {"module": None, "icon": "icone_home.svg"},
+    "🏠 Accueil": {"module": None, "icon": "TB_logo.svg"},
     "BDTool": {"module": "BDTool", "icon": "icone_BD.svg"},
     "KDTool": {"module": "KDTool", "icon": "icone_KD.svg"},
     "MassCalc": {"module": "MassCalc", "icon": "icone_MC.svg"},
@@ -40,11 +40,11 @@ for app_name, info in apps.items():
     with cols[0]:
         # Centrage vertical de l'icône avec un conteneur
         if os.path.exists(icon_path):
-            st.markdown('<div style="display: flex; align-items: center; height: 38px;">', unsafe_allow_html=True)
+            st.markdown('<div style="display: flex; align-items: center; height: 60px;">', unsafe_allow_html=True)
             st.image(icon_path, width=32)
             st.markdown('</div>', unsafe_allow_html=True)
         else:
-            st.markdown('<div style="display: flex; align-items: center; height: 38px; font-size: 20px;">❓</div>', unsafe_allow_html=True)
+            st.markdown('<div style="display: flex; align-items: center; height: 60px; font-size: 20px;">❓</div>', unsafe_allow_html=True)
     
     with cols[1]:
         # Bouton avec hauteur fixe pour alignement
