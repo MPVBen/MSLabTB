@@ -41,7 +41,7 @@ for app_name, info in apps.items():
         # Centrage vertical de l'icône avec un conteneur
         if os.path.exists(icon_path):
             st.markdown('<div style="display: flex; align-items: center; height: 38px;">', unsafe_allow_html=True)
-            st.image(icon_path, width=64)
+            st.image(icon_path, width=128)
             st.markdown('</div>', unsafe_allow_html=True)
         else:
             st.markdown('<div style="display: flex; align-items: center; height: 38px; font-size: 20px;">❓</div>', unsafe_allow_html=True)
