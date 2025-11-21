@@ -39,7 +39,7 @@ for app_name, info in apps.items():
     
     with col1:
         if os.path.exists(icon_path):
-            st.image(icon_path, width=38)
+            st.image(icon_path, width=44)
         else:
             st.write("❓")
     
@@ -54,7 +54,7 @@ if st.session_state.page == "🏠 Accueil":
     # ============================================================================
     # PAGE D'ACCUEIL
     # ============================================================================
-    st.image("images/MSTB.png", width=200)
+    st.image("assets/TB_logo.svg", width=200)
     st.title("🔬 MS Lab Toolbox")
     st.markdown("---")
     
