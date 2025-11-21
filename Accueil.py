@@ -40,11 +40,11 @@ for app_name, info in apps.items():
     with cols[0]:
         # Centrage vertical de l'icône avec un conteneur
         if os.path.exists(icon_path):
-            st.markdown('<div style="display: flex; align-items: center; height: 60px;">', unsafe_allow_html=True)
+            st.markdown('<div style="display: flex; align-items: center; height: 40px;">', unsafe_allow_html=True)
             st.image(icon_path, width=32)
             st.markdown('</div>', unsafe_allow_html=True)
         else:
-            st.markdown('<div style="display: flex; align-items: center; height: 60px; font-size: 20px;">❓</div>', unsafe_allow_html=True)
+            st.markdown('<div style="display: flex; align-items: center; height: 40px; font-size: 20px;">❓</div>', unsafe_allow_html=True)
     
     with cols[1]:
         # Bouton avec hauteur fixe pour alignement
