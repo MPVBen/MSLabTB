@@ -69,6 +69,7 @@ if st.session_state.page == "🏠 Accueil":
     - **KDTool** : Détermination de constantes de dissociation par titrage MS (méthodes Hill & Gabelica)
     - **MassCalc** : Calculateur de masse moléculaire et m/z
     - **ThermoTool** : Calculs de température effective avec ajustements statistiques et gamma
+    - **LabCalc**: Suite de calculateurs utiles pour la préparation d'échantillons
     
     ### 🚀 Pour commencer :
     
@@ -154,11 +155,16 @@ if st.session_state.page == "🏠 Accueil":
         st.success("📊 **Formats**\n\nCSV, Excel")
     
     with col3:
-        st.warning("🔄 **Version**\n\n2.0 - Novembre 2025")
+        st.warning("🔄 **Version**\n\b26w01a - Janvier 2026")
     
     # Section optionnelle : Changelog ou actualités
     with st.expander("📋 Dernières mises à jour"):
         st.markdown("""
+        **Version beta 26w01a** (Jan 2026)
+        - ✅ Correction du calculateur de dilution dans LabCalc
+        - ✅ Suppression des outils inutiles de LabCalc
+        - ✅ Amélioration des outils LabCalc
+        
         **Version beta 25w58b** (Nov 2025)
         - ✅ Ajout des templates Excel téléchargeables
         - ✅ Page d'accueil avec navigation améliorée
