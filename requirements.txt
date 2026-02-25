@@ -8,4 +8,4 @@ openpyxl
 plotly
 molmass
 IsoSpecPy
-xlswriter
+xlsxwriter
