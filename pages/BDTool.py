@@ -257,6 +257,38 @@ def app():
             data_arrays_filtered.append(filtered_array)
     
         return voltages_filtered, data_arrays_filtered
+
+    def normalize_series(values, target_max=1.0):
+        """Normalise une serie finie sur son maximum (ignore NaN/Inf)."""
+        arr = np.asarray(values, dtype=float)
+        finite_mask = np.isfinite(arr)
+
+        if not np.any(finite_mask):
+            return arr.tolist(), 1.0
+
+        ref_max = float(np.max(arr[finite_mask]))
+        out = np.full(arr.shape, np.nan, dtype=float)
+
+        if ref_max > 0:
+            out[finite_mask] = (arr[finite_mask] / ref_max) * target_max
+        else:
+            out[finite_mask] = 0.0
+            ref_max = 1.0
+
+        return out.tolist(), ref_max
+
+    def normalize_with_reference(values, reference_max, target_max=1.0):
+        """Applique une normalisation avec une reference donnee (pour inclure/exclure de facon coherente)."""
+        arr = np.asarray(values, dtype=float)
+        finite_mask = np.isfinite(arr)
+        out = np.full(arr.shape, np.nan, dtype=float)
+
+        if reference_max > 0:
+            out[finite_mask] = (arr[finite_mask] / reference_max) * target_max
+        else:
+            out[finite_mask] = 0.0
+
+        return out.tolist()
     
     # Upload CSV file
     uploaded_file = st.file_uploader(t("Téléverse ton fichier CSV", "Upload your CSV file"), type=["csv"])
@@ -671,6 +703,58 @@ def app():
             voltages_filtered = sorted_voltages.copy()
             survival_yield_filtered = survival_yield.copy()
             fragment_intensities_filtered = [fi.copy() for fi in fragment_intensities]
+
+        # ============================================================================
+        # NORMALISATION OPTIONNELLE DES COURBES
+        # ============================================================================
+
+        st.subheader(t("⚖️ Normalisation des intensités", "⚖️ Intensity normalization"))
+        enable_normalization = st.checkbox(
+            t("✅ Normaliser l'intensité de la courbe de dissociation", "✅ Normalize breakdown-curve intensity"),
+            value=False
+        )
+
+        norm_label_max1 = t("Maximum = 1.0", "Maximum = 1.0")
+        norm_label_max100 = t("Maximum = 100%", "Maximum = 100%")
+        selected_norm_scale = norm_label_max1
+
+        if enable_normalization:
+            selected_norm_scale = st.radio(
+                t("Échelle de normalisation", "Normalization scale"),
+                [norm_label_max1, norm_label_max100],
+                horizontal=True
+            )
+
+        normalization_target_max = 100.0 if (enable_normalization and selected_norm_scale == norm_label_max100) else 1.0
+
+        if enable_normalization:
+            survival_yield_plot, survival_ref_max = normalize_series(survival_yield_filtered, normalization_target_max)
+
+            fragment_intensities_plot = []
+            fragment_ref_maxes = []
+            for frag_values in fragment_intensities_filtered:
+                frag_norm, frag_ref = normalize_series(frag_values, normalization_target_max)
+                fragment_intensities_plot.append(frag_norm)
+                fragment_ref_maxes.append(frag_ref)
+
+            # Normaliser aussi les donnees completes pour afficher correctement les points exclus.
+            survival_yield_all_plot = normalize_with_reference(survival_yield, survival_ref_max, normalization_target_max)
+            fragment_intensities_all_plot = []
+            for idx, frag_values_all in enumerate(fragment_intensities):
+                ref = fragment_ref_maxes[idx] if idx < len(fragment_ref_maxes) else 1.0
+                fragment_intensities_all_plot.append(normalize_with_reference(frag_values_all, ref, normalization_target_max))
+
+            st.info(
+                t(
+                    f"Intensites normalisees sur un maximum de {normalization_target_max:g} par courbe.",
+                    f"Intensities normalized to a maximum of {normalization_target_max:g} per curve."
+                )
+            )
+        else:
+            survival_yield_plot = survival_yield_filtered.copy()
+            fragment_intensities_plot = [fi.copy() for fi in fragment_intensities_filtered]
+            survival_yield_all_plot = survival_yield.copy()
+            fragment_intensities_all_plot = [fi.copy() for fi in fragment_intensities]
     
         # ============================================================================
         # SIGMOID FITTING SECTION AVEC SIGMOID STATISTIQUE SIMPLE
@@ -700,10 +784,10 @@ def app():
     
             # Déterminer les données à ajuster (utilisez les données filtrées)
             if fit_target == t("Survival Yield", "Survival Yield"):
-                data_to_fit = survival_yield_filtered
+                data_to_fit = survival_yield_plot
             else:
                 frag_idx = fragment_labels.index(fit_target)
-                data_to_fit = fragment_intensities_filtered[frag_idx]
+                data_to_fit = fragment_intensities_plot[frag_idx]
     
             # Effectuer le fit
             if len(voltages_filtered) >= 4 and len(data_to_fit) >= 4:
@@ -775,8 +859,9 @@ def app():
         st.markdown(t("**Personnalisation des axes pour la courbe de dissociation**", "**Breakdown curve axis customization**"))
     
         # Calculs sécurisés des limites par défaut (utiliser les données filtrées pour un meilleur zoom)
-        default_y_min = safe_min(survival_yield_filtered, 0.0)
-        default_y_max = safe_max(survival_yield_filtered, 1.0)
+        y_default_limit = normalization_target_max if enable_normalization else 1.0
+        default_y_min = safe_min(survival_yield_plot, 0.0)
+        default_y_max = safe_max(survival_yield_plot, y_default_limit)
         default_x_min = min(voltages_filtered) if voltages_filtered else 0
         default_x_max = max(voltages_filtered) if voltages_filtered else 50
     
@@ -795,7 +880,7 @@ def app():
         x_max = st.number_input(t("Voltage max (axe X)", "Max voltage (X axis)"), value=int(default_x_max))
     
         # VALIDATION FINALE DES LIMITES AVANT LE GRAPHIQUE
-        breakdown_y_min, breakdown_y_max = validate_axis_limits(breakdown_y_min, breakdown_y_max, 0.0, 1.0)
+        breakdown_y_min, breakdown_y_max = validate_axis_limits(breakdown_y_min, breakdown_y_max, 0.0, y_default_limit)
         x_min, x_max = validate_axis_limits(x_min, x_max, default_x_min, default_x_max)
     
         # Graphique Matplotlib AVEC PROTECTION ET FIT SIGMOÏDE
@@ -803,8 +888,8 @@ def app():
     
         # Afficher TOUTES les données (y compris les points exclus) mais les distinguer visuellement
         # Points inclus dans l'analyse
-        valid_voltages = [v for v, s in zip(voltages_filtered, survival_yield_filtered) if np.isfinite(s)]
-        valid_survival = [s for s in survival_yield_filtered if np.isfinite(s)]
+        valid_voltages = [v for v, s in zip(voltages_filtered, survival_yield_plot) if np.isfinite(s)]
+        valid_survival = [s for s in survival_yield_plot if np.isfinite(s)]
     
         if len(valid_voltages) > 0 and len(valid_survival) > 0:
             ax.plot(valid_voltages, valid_survival, 'o-', label=t("Survival Yield (inclus)", "Survival Yield (included)"), 
@@ -813,9 +898,9 @@ def app():
         # Points exclus (si il y en a)
         if enable_exclusion and excluded_indices:
             excluded_pairs = [
-                (sorted_voltages[i], survival_yield[i])
+                (sorted_voltages[i], survival_yield_all_plot[i])
                 for i in sorted(excluded_indices)
-                if np.isfinite(survival_yield[i])
+                if np.isfinite(survival_yield_all_plot[i])
             ]
 
             if excluded_pairs:
@@ -827,8 +912,8 @@ def app():
     
         # Fragments (données filtrées pour l'analyse)
         for idx in range(num_fragments):
-            valid_frag_voltages = [v for v, f in zip(voltages_filtered, fragment_intensities_filtered[idx]) if np.isfinite(f)]
-            valid_frag_intensities = [f for f in fragment_intensities_filtered[idx] if np.isfinite(f)]
+            valid_frag_voltages = [v for v, f in zip(voltages_filtered, fragment_intensities_plot[idx]) if np.isfinite(f)]
+            valid_frag_intensities = [f for f in fragment_intensities_plot[idx] if np.isfinite(f)]
     
             if len(valid_frag_voltages) > 0 and len(valid_frag_intensities) > 0:
                 ax.plot(valid_frag_voltages, valid_frag_intensities, 'x--', 
@@ -837,9 +922,9 @@ def app():
             # Fragments exclus
             if enable_exclusion and excluded_indices:
                 excluded_frag_pairs = [
-                    (sorted_voltages[i], fragment_intensities[idx][i])
+                    (sorted_voltages[i], fragment_intensities_all_plot[idx][i])
                     for i in sorted(excluded_indices)
-                    if np.isfinite(fragment_intensities[idx][i])
+                    if np.isfinite(fragment_intensities_all_plot[idx][i])
                 ]
 
                 if excluded_frag_pairs:
@@ -859,7 +944,13 @@ def app():
                        alpha=0.8)
     
         ax.set_xlabel(t("Voltage de collision (V)", "Collision voltage (V)"))
-        ax.set_ylabel(t("Survival Yield", "Survival yield"))
+        if enable_normalization:
+            if normalization_target_max == 100.0:
+                ax.set_ylabel(t("Intensité normalisée (%)", "Normalized intensity (%)"))
+            else:
+                ax.set_ylabel(t("Intensité normalisée (max=1)", "Normalized intensity (max=1)"))
+        else:
+            ax.set_ylabel(t("Survival Yield", "Survival yield"))
     
         # Application sécurisée des limites
         try:
