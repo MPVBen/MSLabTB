@@ -106,17 +106,25 @@ def app():
             return {"success": False, "error": "Not enough valid data points after cleaning"}
     
         try:
+            # Scale-aware fitting: keep bounded fit stable even if data is normalized to 100%.
+            y_scale = float(np.max(np.abs(survival_clean)))
+            if not np.isfinite(y_scale) or y_scale <= 0:
+                return {"success": False, "error": "Invalid signal amplitude for fitting"}
+
+            fit_scaled = y_scale > (1.0 + 1e-9)
+            survival_for_fit = survival_clean / y_scale if fit_scaled else survival_clean.copy()
+
             # Estimate initial parameters
-            y_min = np.min(survival_clean)
-            y_max = np.max(survival_clean)
-            v_mid = voltages_clean[np.argmin(np.abs(survival_clean - (y_min + y_max) / 2))]
+            y_min = np.min(survival_for_fit)
+            y_max = np.max(survival_for_fit)
+            v_mid = voltages_clean[np.argmin(np.abs(survival_for_fit - (y_min + y_max) / 2))]
     
             if method == "Hill":
                 # Initial guess: [bottom, top, ec50, hill_slope]
                 initial_guess = [y_min, y_max, v_mid, 1.0]
                 bounds = ([0, 0, np.min(voltages_clean), 0.1],
                          [1, 1, np.max(voltages_clean), 10])
-                popt, pcov = curve_fit(hill_equation, voltages_clean, survival_clean,
+                popt, pcov = curve_fit(hill_equation, voltages_clean, survival_for_fit,
                                      p0=initial_guess, bounds=bounds, maxfev=5000)
                 v50 = popt[2] # ec50 parameter
                 param_names = ['Bottom', 'Top', 'V50', 'Hill Slope']
@@ -127,7 +135,7 @@ def app():
                 initial_guess = [y_min, y_max, v_mid, slope_guess]
                 bounds = ([0, 0, np.min(voltages_clean), 0.1],
                          [1, 1, np.max(voltages_clean), 50])
-                popt, pcov = curve_fit(boltzmann_equation, voltages_clean, survival_clean,
+                popt, pcov = curve_fit(boltzmann_equation, voltages_clean, survival_for_fit,
                                      p0=initial_guess, bounds=bounds, maxfev=5000)
                 v50 = popt[2] # v50 parameter
                 param_names = ['Bottom', 'Top', 'V50', 'Slope']
@@ -138,7 +146,7 @@ def app():
                 initial_guess = [y_min, y_max, v_mid, slope_guess]
                 bounds = ([0, 0, np.min(voltages_clean), 0.1],
                          [1, 1, np.max(voltages_clean), 10])
-                popt, pcov = curve_fit(statistical_sigmoid, voltages_clean, survival_clean,
+                popt, pcov = curve_fit(statistical_sigmoid, voltages_clean, survival_for_fit,
                                      p0=initial_guess, bounds=bounds, maxfev=5000)
                 v50 = popt[2] # v50 parameter
                 param_names = ['Bottom', 'Top', 'V50', 'Slope']
@@ -148,11 +156,13 @@ def app():
     
             # Calculate R-squared
             if method == "Hill":
-                y_pred = hill_equation(voltages_clean, *popt)
+                y_pred_fit = hill_equation(voltages_clean, *popt)
             elif method == "Boltzmann":
-                y_pred = boltzmann_equation(voltages_clean, *popt)
+                y_pred_fit = boltzmann_equation(voltages_clean, *popt)
             elif method == "Statistical Sigmoid":
-                y_pred = statistical_sigmoid(voltages_clean, *popt)
+                y_pred_fit = statistical_sigmoid(voltages_clean, *popt)
+
+            y_pred = y_pred_fit * y_scale if fit_scaled else y_pred_fit
     
             residuals = survival_clean - y_pred
             ss_res = np.sum(residuals ** 2)
@@ -161,6 +171,14 @@ def app():
     
             # Calculate parameter errors from covariance matrix
             param_errors = np.sqrt(np.diag(pcov))
+
+            # Report bottom/top parameters on the original y scale.
+            popt_report = popt.copy()
+            if fit_scaled:
+                popt_report[0] = popt_report[0] * y_scale
+                popt_report[1] = popt_report[1] * y_scale
+                param_errors[0] = param_errors[0] * y_scale
+                param_errors[1] = param_errors[1] * y_scale
     
             # Calculate additional fit statistics
             n = len(voltages_clean)
@@ -190,13 +208,14 @@ def app():
                 "rmse": rmse,
                 "aic": aic,
                 "bic": bic,
-                "parameters": popt,
+                "parameters": popt_report,
                 "param_errors": param_errors,
                 "param_names": param_names,
                 "voltages_clean": voltages_clean,
                 "survival_clean": survival_clean,
                 "residuals": residuals,
-                "y_pred": y_pred
+                "y_pred": y_pred,
+                "y_scale": y_scale
             }
     
         except Exception as e:
@@ -813,8 +832,7 @@ def app():
             if not compare_dataset_names:
                 st.warning(t("Sélectionnez au moins un jeu de données.", "Select at least one dataset."))
             else:
-                fig_cmp, ax_cmp = plt.subplots()
-                has_compare_data = False
+                comparison_payload = []
                 compare_rows = []
 
                 for ds in datasets:
@@ -849,16 +867,138 @@ def app():
 
                     xv = [p[0] for p in valid_pairs]
                     yv = [p[1] for p in valid_pairs]
-                    ax_cmp.plot(xv, yv, 'o-', linewidth=2, markersize=5, label=ds['name'])
+                    comparison_payload.append({
+                        "name": ds['name'],
+                        "x": xv,
+                        "y": yv
+                    })
                     for x_val, y_val in valid_pairs:
                         compare_rows.append({
                             "Dataset": ds['name'],
                             "Voltage": x_val,
                             "Value": y_val
                         })
-                    has_compare_data = True
 
-                if has_compare_data:
+                if comparison_payload:
+                    all_cmp_x = [x for row in comparison_payload for x in row["x"]]
+                    all_cmp_y = [y for row in comparison_payload for y in row["y"]]
+
+                    cmp_default_y_limit = normalization_target_max if enable_normalization else 1.0
+                    cmp_default_y_min = safe_min(all_cmp_y, 0.0)
+                    cmp_default_y_max = safe_max(all_cmp_y, cmp_default_y_limit)
+                    cmp_default_x_min = safe_min(all_cmp_x, 0.0)
+                    cmp_default_x_max = safe_max(all_cmp_x, 50.0)
+
+                    st.markdown(t(
+                        "**Personnalisation des axes pour le graphe de comparaison**",
+                        "**Axis customization for comparison graph**"
+                    ))
+
+                    cmp_col1, cmp_col2, cmp_col3 = st.columns(3)
+                    with cmp_col1:
+                        cmp_y_min = st.number_input(
+                            t("Intensité min (comparaison)", "Intensity min (comparison)"),
+                            value=float(cmp_default_y_min),
+                            key="cmp_y_min"
+                        )
+                    with cmp_col2:
+                        cmp_y_max = st.number_input(
+                            t("Intensité max (comparaison)", "Intensity max (comparison)"),
+                            value=float(cmp_default_y_max),
+                            key="cmp_y_max"
+                        )
+                    with cmp_col3:
+                        cmp_x_step = st.number_input(
+                            t("Pas de voltage (comparaison)", "Voltage step (comparison)"),
+                            min_value=0.1,
+                            value=2.0,
+                            step=0.1,
+                            key="cmp_x_step"
+                        )
+
+                    cmp_col4, cmp_col5 = st.columns(2)
+                    with cmp_col4:
+                        cmp_x_min = st.number_input(
+                            t("Voltage min (comparaison)", "Min voltage (comparison)"),
+                            value=float(cmp_default_x_min),
+                            key="cmp_x_min"
+                        )
+                    with cmp_col5:
+                        cmp_x_max = st.number_input(
+                            t("Voltage max (comparaison)", "Max voltage (comparison)"),
+                            value=float(cmp_default_x_max),
+                            key="cmp_x_max"
+                        )
+
+                    cmp_y_min, cmp_y_max = validate_axis_limits(cmp_y_min, cmp_y_max, 0.0, cmp_default_y_limit)
+                    cmp_x_min, cmp_x_max = validate_axis_limits(cmp_x_min, cmp_x_max, cmp_default_x_min, cmp_default_x_max)
+                    if cmp_x_step <= 0:
+                        cmp_x_step = 1.0
+
+                    enable_compare_sigmoid = st.checkbox(
+                        t("✅ Afficher l'ajustement sigmoïde sur le graphe de comparaison", "✅ Show sigmoid fit on comparison graph"),
+                        value=False,
+                        key="enable_compare_sigmoid"
+                    )
+                    compare_sigmoid_method = "Hill"
+                    if enable_compare_sigmoid:
+                        compare_sigmoid_method = st.selectbox(
+                            t("Méthode d'ajustement (comparaison)", "Fitting method (comparison)"),
+                            ["Hill", "Boltzmann", "Statistical Sigmoid"],
+                            key="compare_sigmoid_method"
+                        )
+
+                    fig_cmp, ax_cmp = plt.subplots()
+                    fit_summary_rows = []
+
+                    for row in comparison_payload:
+                        line_obj, = ax_cmp.plot(row["x"], row["y"], 'o-', linewidth=2, markersize=5, label=row["name"])
+
+                        if enable_compare_sigmoid:
+                            if len(row["x"]) >= 4:
+                                cmp_fit = fit_sigmoid_curve(row["x"], row["y"], compare_sigmoid_method)
+                                if cmp_fit["success"]:
+                                    smooth_data = plot_sigmoid_fit(row["x"], row["y"], cmp_fit)
+                                    if smooth_data:
+                                        v_smooth_cmp, y_smooth_cmp = smooth_data
+                                        ax_cmp.plot(
+                                            v_smooth_cmp,
+                                            y_smooth_cmp,
+                                            '--',
+                                            linewidth=1.8,
+                                            color=line_obj.get_color(),
+                                            alpha=0.9,
+                                            label=f"{row['name']} fit (V50={cmp_fit['v50']:.1f}V)"
+                                        )
+
+                                    fit_summary_rows.append({
+                                        "Dataset": row["name"],
+                                        "Method": compare_sigmoid_method,
+                                        "Status": "OK",
+                                        "V50": cmp_fit["v50"],
+                                        "R2": cmp_fit["r2"],
+                                        "RMSE": cmp_fit["rmse"]
+                                    })
+                                else:
+                                    fit_summary_rows.append({
+                                        "Dataset": row["name"],
+                                        "Method": compare_sigmoid_method,
+                                        "Status": "Failed",
+                                        "V50": np.nan,
+                                        "R2": np.nan,
+                                        "RMSE": np.nan,
+                                        "Error": cmp_fit.get("error", "Unknown error")
+                                    })
+                            else:
+                                fit_summary_rows.append({
+                                    "Dataset": row["name"],
+                                    "Method": compare_sigmoid_method,
+                                    "Status": "Insufficient points",
+                                    "V50": np.nan,
+                                    "R2": np.nan,
+                                    "RMSE": np.nan
+                                })
+
                     ax_cmp.set_xlabel(t("Voltage de collision (V)", "Collision voltage (V)"))
                     if enable_normalization:
                         if normalization_target_max == 100.0:
@@ -868,6 +1008,18 @@ def app():
                     else:
                         ax_cmp.set_ylabel(t("Ratio d'intensité", "Intensity ratio"))
 
+                    try:
+                        ax_cmp.set_ylim([cmp_y_min, cmp_y_max])
+                        ax_cmp.set_xlim([cmp_x_min, cmp_x_max])
+                        cmp_ticks = np.arange(cmp_x_min, cmp_x_max + (cmp_x_step * 0.5), cmp_x_step)
+                        if len(cmp_ticks) <= 400:
+                            ax_cmp.set_xticks(cmp_ticks)
+                    except Exception as e:
+                        st.warning(t(
+                            f"Configuration automatique des axes de comparaison utilisée ({e}).",
+                            f"Automatic comparison-axis configuration used ({e})."
+                        ))
+
                     ax_cmp.set_title(t("Comparaison des courbes de dissociation", "Breakdown curve comparison"))
                     ax_cmp.grid(True, alpha=0.3)
                     ax_cmp.legend()
@@ -876,6 +1028,13 @@ def app():
                         "La comparaison utilise les points complets de chaque jeu (sans exclusion de points).",
                         "Comparison uses full points for each dataset (without point exclusion)."
                     ))
+
+                    if enable_compare_sigmoid and fit_summary_rows:
+                        st.markdown(t("**Résumé des ajustements (comparaison)**", "**Fit summary (comparison)**"))
+                        fit_summary_df = pd.DataFrame(fit_summary_rows)
+                        st.dataframe(fit_summary_df, use_container_width=True)
+                    else:
+                        fit_summary_df = None
 
                     if compare_rows:
                         compare_df = pd.DataFrame(compare_rows)
@@ -890,6 +1049,19 @@ def app():
                             aggfunc="first"
                         ).reset_index()
 
+                        metadata_df = pd.DataFrame([
+                            {"Parameter": "Curve", "Value": compare_curve_target},
+                            {"Parameter": "Normalization_Enabled", "Value": enable_normalization},
+                            {"Parameter": "Normalization_Max", "Value": normalization_target_max if enable_normalization else "None"},
+                            {"Parameter": "Compare_X_Min", "Value": cmp_x_min},
+                            {"Parameter": "Compare_X_Max", "Value": cmp_x_max},
+                            {"Parameter": "Compare_X_Step", "Value": cmp_x_step},
+                            {"Parameter": "Compare_Y_Min", "Value": cmp_y_min},
+                            {"Parameter": "Compare_Y_Max", "Value": cmp_y_max},
+                            {"Parameter": "Sigmoid_Enabled", "Value": enable_compare_sigmoid},
+                            {"Parameter": "Sigmoid_Method", "Value": compare_sigmoid_method if enable_compare_sigmoid else "None"},
+                        ])
+
                         svg_cmp_buffer = io.BytesIO()
                         fig_cmp.savefig(svg_cmp_buffer, format='svg')
                         svg_cmp_buffer.seek(0)
@@ -898,6 +1070,9 @@ def app():
                         with pd.ExcelWriter(excel_cmp_buffer, engine='xlsxwriter') as writer:
                             compare_df.to_excel(writer, sheet_name='Comparison_Long', index=False)
                             compare_wide_df.to_excel(writer, sheet_name='Comparison_Wide', index=False)
+                            metadata_df.to_excel(writer, sheet_name='Comparison_Metadata', index=False)
+                            if fit_summary_df is not None:
+                                fit_summary_df.to_excel(writer, sheet_name='Comparison_Fits', index=False)
                         excel_cmp_buffer.seek(0)
 
                         col_cmp_export_1, col_cmp_export_2 = st.columns(2)
