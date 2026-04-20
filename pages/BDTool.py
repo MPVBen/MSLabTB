@@ -241,6 +241,153 @@ def app():
             y_smooth = statistical_sigmoid(v_smooth, *popt)
     
         return v_smooth, y_smooth
+
+    def evaluate_sigmoid_curve(x_values, fit_result):
+        """Evaluate fitted sigmoid model for arbitrary x values."""
+        if not fit_result or (not fit_result.get("success", False)):
+            return None
+
+        method = fit_result.get("method")
+        params = fit_result.get("parameters", [])
+        if params is None or len(params) < 4:
+            return None
+
+        x_arr = np.asarray(x_values, dtype=float)
+        try:
+            if method == "Hill":
+                return hill_equation(x_arr, *params)
+            if method == "Boltzmann":
+                return boltzmann_equation(x_arr, *params)
+            if method == "Statistical Sigmoid":
+                return statistical_sigmoid(x_arr, *params)
+        except Exception:
+            return None
+
+        return None
+
+    def compute_sigmoid_derivative(x_values, fit_result):
+        """Compute analytical dy/dV for the fitted sigmoid model."""
+        if not fit_result or (not fit_result.get("success", False)):
+            return None
+
+        method = fit_result.get("method")
+        params = fit_result.get("parameters", [])
+        if params is None or len(params) < 4:
+            return None
+
+        x_arr = np.asarray(x_values, dtype=float)
+        bottom, top, v50, shape = [float(p) for p in params[:4]]
+
+        with np.errstate(over='ignore', divide='ignore', invalid='ignore'):
+            if method == "Hill":
+                ec50 = v50 if abs(v50) > 1e-12 else (1e-12 if v50 >= 0 else -1e-12)
+                base = np.clip(x_arr / ec50, 1e-12, None)
+                base_h = np.power(base, shape)
+                base_hm1 = np.power(base, shape - 1.0)
+                deriv = -((top - bottom) * shape * base_hm1) / (ec50 * np.power(1.0 + base_h, 2.0))
+                return deriv
+
+            if method == "Boltzmann":
+                slope = shape if abs(shape) > 1e-12 else (1e-12 if shape >= 0 else -1e-12)
+                z = np.clip((v50 - x_arr) / slope, -700, 700)
+                ez = np.exp(z)
+                deriv = ((top - bottom) * ez) / (slope * np.power(1.0 + ez, 2.0))
+                return deriv
+
+            if method == "Statistical Sigmoid":
+                k = shape
+                z = np.clip(k * (v50 - x_arr), -700, 700)
+                ez = np.exp(z)
+                deriv = ((top - bottom) * k * ez) / np.power(1.0 + ez, 2.0)
+                return deriv
+
+        return None
+
+    def compute_transition_metrics(fit_result, x_min=None, x_max=None):
+        """Compute steep-transition metrics from a fitted sigmoid model."""
+        if not fit_result or (not fit_result.get("success", False)):
+            return {"success": False, "error": "No successful fit available"}
+
+        voltages_clean = np.asarray(fit_result.get("voltages_clean", []), dtype=float)
+        if len(voltages_clean) < 4:
+            return {"success": False, "error": "Not enough fitted points"}
+
+        if x_min is None:
+            x_min = safe_min(voltages_clean, 0.0)
+        if x_max is None:
+            x_max = safe_max(voltages_clean, x_min + 1.0)
+        if (not np.isfinite(x_min)) or (not np.isfinite(x_max)) or (x_min >= x_max):
+            x_min = safe_min(voltages_clean, 0.0)
+            x_max = safe_max(voltages_clean, x_min + 1.0)
+            if x_min >= x_max:
+                x_max = x_min + 1.0
+
+        x_dense = np.linspace(float(x_min), float(x_max), 2000)
+        y_dense = evaluate_sigmoid_curve(x_dense, fit_result)
+        dy_dense = compute_sigmoid_derivative(x_dense, fit_result)
+
+        if y_dense is None or dy_dense is None:
+            return {"success": False, "error": "Unable to evaluate fitted model"}
+
+        y_dense = np.asarray(y_dense, dtype=float)
+        dy_dense = np.asarray(dy_dense, dtype=float)
+
+        dy_at_v50_arr = compute_sigmoid_derivative(np.asarray([fit_result.get("v50", np.nan)], dtype=float), fit_result)
+        slope_at_v50 = float(dy_at_v50_arr[0]) if (dy_at_v50_arr is not None and len(dy_at_v50_arr) > 0) else np.nan
+
+        steepest_slope = np.nan
+        steepest_slope_abs = np.nan
+        steepest_voltage = np.nan
+        finite_deriv = np.isfinite(dy_dense)
+        if np.any(finite_deriv):
+            abs_dy = np.abs(dy_dense)
+            abs_dy[~finite_deriv] = -np.inf
+            idx_max = int(np.argmax(abs_dy))
+            steepest_slope = float(dy_dense[idx_max])
+            steepest_slope_abs = float(abs_dy[idx_max])
+            steepest_voltage = float(x_dense[idx_max])
+
+        params = np.asarray(fit_result.get("parameters", []), dtype=float)
+        v10 = np.nan
+        v90 = np.nan
+        v10_v90_width = np.nan
+        if len(params) >= 2:
+            bottom = float(params[0])
+            top = float(params[1])
+            amplitude = top - bottom
+            if np.isfinite(amplitude) and abs(amplitude) > 1e-12:
+                progress = (y_dense - bottom) / amplitude
+                finite_progress = np.isfinite(progress) & np.isfinite(x_dense)
+                if np.count_nonzero(finite_progress) >= 2:
+                    p = progress[finite_progress]
+                    xv = x_dense[finite_progress]
+
+                    if p[-1] >= p[0]:
+                        p_mono = np.maximum.accumulate(p)
+                        p_interp = p_mono
+                        x_interp = xv
+                    else:
+                        p_mono = np.minimum.accumulate(p)
+                        p_interp = p_mono[::-1]
+                        x_interp = xv[::-1]
+
+                    p_unique, unique_idx = np.unique(p_interp, return_index=True)
+                    x_unique = x_interp[unique_idx]
+                    if len(p_unique) >= 2 and p_unique[0] <= 0.1 <= p_unique[-1] and p_unique[0] <= 0.9 <= p_unique[-1]:
+                        v10 = float(np.interp(0.1, p_unique, x_unique))
+                        v90 = float(np.interp(0.9, p_unique, x_unique))
+                        v10_v90_width = float(abs(v90 - v10))
+
+        return {
+            "success": True,
+            "slope_at_v50": slope_at_v50,
+            "steepest_slope": steepest_slope,
+            "steepest_slope_abs": steepest_slope_abs,
+            "steepest_voltage": steepest_voltage,
+            "v10": v10,
+            "v90": v90,
+            "v10_v90_width": v10_v90_width,
+        }
     
     # ============================================================================
     # NOUVELLE FONCTION POUR L'EXCLUSION DE POINTS
@@ -941,12 +1088,37 @@ def app():
                         key="enable_compare_sigmoid"
                     )
                     compare_sigmoid_method = "Hill"
+                    enable_compare_transition_metrics = False
+                    selected_compare_transition_keys = []
+
+                    compare_transition_metric_map = {
+                        t("Pente à V50", "Slope at V50"): "slope_at_v50",
+                        t("Pente maximale (zone raide)", "Steepest slope"): "steepest_slope",
+                        t("Largeur V10-V90", "V10-V90 width"): "v10_v90_width",
+                    }
+
                     if enable_compare_sigmoid:
                         compare_sigmoid_method = st.selectbox(
                             t("Méthode d'ajustement (comparaison)", "Fitting method (comparison)"),
                             ["Hill", "Boltzmann", "Statistical Sigmoid"],
                             key="compare_sigmoid_method"
                         )
+                        enable_compare_transition_metrics = st.checkbox(
+                            t("✅ Afficher les métriques de pente en comparaison", "✅ Show slope metrics in comparison"),
+                            value=False,
+                            key="enable_compare_transition_metrics"
+                        )
+                        if enable_compare_transition_metrics:
+                            selected_compare_labels = st.multiselect(
+                                t("Métriques à afficher (comparaison)", "Metrics to display (comparison)"),
+                                options=list(compare_transition_metric_map.keys()),
+                                default=list(compare_transition_metric_map.keys()),
+                                key="compare_transition_metrics_selected"
+                            )
+                            selected_compare_transition_keys = [
+                                compare_transition_metric_map[label]
+                                for label in selected_compare_labels
+                            ]
 
                     fig_cmp, ax_cmp = plt.subplots()
                     fit_summary_rows = []
@@ -971,16 +1143,35 @@ def app():
                                             label=f"{row['name']} fit (V50={cmp_fit['v50']:.1f}V)"
                                         )
 
-                                    fit_summary_rows.append({
+                                    fit_row = {
                                         "Dataset": row["name"],
                                         "Method": compare_sigmoid_method,
                                         "Status": "OK",
                                         "V50": cmp_fit["v50"],
                                         "R2": cmp_fit["r2"],
                                         "RMSE": cmp_fit["rmse"]
-                                    })
+                                    }
+
+                                    if selected_compare_transition_keys:
+                                        tr_metrics = compute_transition_metrics(cmp_fit)
+                                        if tr_metrics.get("success", False):
+                                            if "slope_at_v50" in selected_compare_transition_keys:
+                                                fit_row["Slope_at_V50"] = tr_metrics.get("slope_at_v50", np.nan)
+                                            if "steepest_slope" in selected_compare_transition_keys:
+                                                fit_row["Steepest_Slope"] = tr_metrics.get("steepest_slope_abs", np.nan)
+                                            if "v10_v90_width" in selected_compare_transition_keys:
+                                                fit_row["V10_V90_Width"] = tr_metrics.get("v10_v90_width", np.nan)
+                                        else:
+                                            if "slope_at_v50" in selected_compare_transition_keys:
+                                                fit_row["Slope_at_V50"] = np.nan
+                                            if "steepest_slope" in selected_compare_transition_keys:
+                                                fit_row["Steepest_Slope"] = np.nan
+                                            if "v10_v90_width" in selected_compare_transition_keys:
+                                                fit_row["V10_V90_Width"] = np.nan
+
+                                    fit_summary_rows.append(fit_row)
                                 else:
-                                    fit_summary_rows.append({
+                                    failed_row = {
                                         "Dataset": row["name"],
                                         "Method": compare_sigmoid_method,
                                         "Status": "Failed",
@@ -988,16 +1179,30 @@ def app():
                                         "R2": np.nan,
                                         "RMSE": np.nan,
                                         "Error": cmp_fit.get("error", "Unknown error")
-                                    })
+                                    }
+                                    if "slope_at_v50" in selected_compare_transition_keys:
+                                        failed_row["Slope_at_V50"] = np.nan
+                                    if "steepest_slope" in selected_compare_transition_keys:
+                                        failed_row["Steepest_Slope"] = np.nan
+                                    if "v10_v90_width" in selected_compare_transition_keys:
+                                        failed_row["V10_V90_Width"] = np.nan
+                                    fit_summary_rows.append(failed_row)
                             else:
-                                fit_summary_rows.append({
+                                insufficient_row = {
                                     "Dataset": row["name"],
                                     "Method": compare_sigmoid_method,
                                     "Status": "Insufficient points",
                                     "V50": np.nan,
                                     "R2": np.nan,
                                     "RMSE": np.nan
-                                })
+                                }
+                                if "slope_at_v50" in selected_compare_transition_keys:
+                                    insufficient_row["Slope_at_V50"] = np.nan
+                                if "steepest_slope" in selected_compare_transition_keys:
+                                    insufficient_row["Steepest_Slope"] = np.nan
+                                if "v10_v90_width" in selected_compare_transition_keys:
+                                    insufficient_row["V10_V90_Width"] = np.nan
+                                fit_summary_rows.append(insufficient_row)
 
                     ax_cmp.set_xlabel(t("Voltage de collision (V)", "Collision voltage (V)"))
                     if enable_normalization:
@@ -1060,6 +1265,8 @@ def app():
                             {"Parameter": "Compare_Y_Max", "Value": cmp_y_max},
                             {"Parameter": "Sigmoid_Enabled", "Value": enable_compare_sigmoid},
                             {"Parameter": "Sigmoid_Method", "Value": compare_sigmoid_method if enable_compare_sigmoid else "None"},
+                            {"Parameter": "Transition_Metrics_Enabled", "Value": enable_compare_transition_metrics if enable_compare_sigmoid else False},
+                            {"Parameter": "Transition_Metrics_Selected", "Value": ",".join(selected_compare_transition_keys) if selected_compare_transition_keys else "None"},
                         ])
 
                         svg_cmp_buffer = io.BytesIO()
@@ -1103,6 +1310,9 @@ def app():
     
         # Options de fit sigmoïde
         enable_sigmoid = st.checkbox(t("✅ Activer l'ajustement sigmoïde", "✅ Enable sigmoid fitting"))
+
+        transition_metrics_result = None
+        selected_transition_metric_keys = []
     
         if enable_sigmoid:
             col1, col2 = st.columns(2)
@@ -1156,6 +1366,71 @@ def app():
                     with col4:
                         st.metric("RMSE", f"{fit_result['rmse']:.4f}",
                                  help=t("Erreur quadratique moyenne", "Root mean square error"))
+
+                    transition_metric_map = {
+                        t("Pente à V50", "Slope at V50"): "slope_at_v50",
+                        t("Pente maximale (zone raide)", "Steepest slope"): "steepest_slope",
+                        t("Largeur V10-V90", "V10-V90 width"): "v10_v90_width",
+                    }
+
+                    enable_transition_metrics = st.checkbox(
+                        t("✅ Afficher les métriques de pente/transition", "✅ Show slope/transition metrics"),
+                        value=False,
+                        key="enable_transition_metrics_main"
+                    )
+
+                    if enable_transition_metrics:
+                        selected_transition_labels = st.multiselect(
+                            t("Métriques à afficher", "Metrics to display"),
+                            options=list(transition_metric_map.keys()),
+                            default=list(transition_metric_map.keys()),
+                            key="selected_transition_metrics_main"
+                        )
+                        selected_transition_metric_keys = [
+                            transition_metric_map[label]
+                            for label in selected_transition_labels
+                        ]
+
+                        if selected_transition_metric_keys:
+                            transition_metrics_result = compute_transition_metrics(fit_result)
+                            if transition_metrics_result.get("success", False):
+                                transition_rows = []
+
+                                if "slope_at_v50" in selected_transition_metric_keys:
+                                    transition_rows.append({
+                                        t("Métrique", "Metric"): t("Pente à V50", "Slope at V50"),
+                                        t("Valeur", "Value"): transition_metrics_result.get("slope_at_v50", np.nan),
+                                        t("Détail", "Detail"): t("Unités: intensité/V", "Units: intensity/V")
+                                    })
+
+                                if "steepest_slope" in selected_transition_metric_keys:
+                                    transition_rows.append({
+                                        t("Métrique", "Metric"): t("Pente maximale (zone raide)", "Steepest slope"),
+                                        t("Valeur", "Value"): transition_metrics_result.get("steepest_slope_abs", np.nan),
+                                        t("Détail", "Detail"): t(
+                                            f"à V={transition_metrics_result.get('steepest_voltage', np.nan):.2f} (intensité/V)",
+                                            f"at V={transition_metrics_result.get('steepest_voltage', np.nan):.2f} (intensity/V)"
+                                        )
+                                    })
+
+                                if "v10_v90_width" in selected_transition_metric_keys:
+                                    transition_rows.append({
+                                        t("Métrique", "Metric"): t("Largeur V10-V90", "V10-V90 width"),
+                                        t("Valeur", "Value"): transition_metrics_result.get("v10_v90_width", np.nan),
+                                        t("Détail", "Detail"): t(
+                                            f"V10={transition_metrics_result.get('v10', np.nan):.2f}, V90={transition_metrics_result.get('v90', np.nan):.2f}",
+                                            f"V10={transition_metrics_result.get('v10', np.nan):.2f}, V90={transition_metrics_result.get('v90', np.nan):.2f}"
+                                        )
+                                    })
+
+                                if transition_rows:
+                                    st.markdown(t("**📐 Métriques de transition**", "**📐 Transition metrics**"))
+                                    st.dataframe(pd.DataFrame(transition_rows), use_container_width=True, hide_index=True)
+                            else:
+                                st.warning(t(
+                                    f"Métriques de transition indisponibles: {transition_metrics_result.get('error', 'erreur inconnue')}",
+                                    f"Transition metrics unavailable: {transition_metrics_result.get('error', 'unknown error')}"
+                                ))
     
                     # Tableau des paramètres
                     st.subheader(t("📊 Paramètres de l'ajustement", "📊 Fitting Parameters"))
@@ -1360,6 +1635,21 @@ def app():
                                  fit_result['rmse'], fit_result['aic'], fit_result['bic'], fit_result['method'],
                                  len(voltages_filtered), len(excluded_indices)]
                     })
+
+                    if transition_metrics_result and transition_metrics_result.get("success", False):
+                        extra_rows = []
+                        if "slope_at_v50" in selected_transition_metric_keys:
+                            extra_rows.append({"Metric": "Slope_at_V50", "Value": transition_metrics_result.get("slope_at_v50", np.nan)})
+                        if "steepest_slope" in selected_transition_metric_keys:
+                            extra_rows.append({"Metric": "Steepest_Slope", "Value": transition_metrics_result.get("steepest_slope_abs", np.nan)})
+                            extra_rows.append({"Metric": "Steepest_Slope_Voltage", "Value": transition_metrics_result.get("steepest_voltage", np.nan)})
+                        if "v10_v90_width" in selected_transition_metric_keys:
+                            extra_rows.append({"Metric": "V10", "Value": transition_metrics_result.get("v10", np.nan)})
+                            extra_rows.append({"Metric": "V90", "Value": transition_metrics_result.get("v90", np.nan)})
+                            extra_rows.append({"Metric": "V10_V90_Width", "Value": transition_metrics_result.get("v10_v90_width", np.nan)})
+
+                        if extra_rows:
+                            df_results = pd.concat([df_results, pd.DataFrame(extra_rows)], ignore_index=True)
                     df_results.to_excel(writer, sheet_name='Fit_Results', index=False)
     
             else:
