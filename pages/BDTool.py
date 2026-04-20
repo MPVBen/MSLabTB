@@ -289,14 +289,56 @@ def app():
             out[finite_mask] = 0.0
 
         return out.tolist()
+
+    def compute_breakdown_arrays(voltage_dict, sorted_voltages, precursor_min, precursor_max, fragment_ranges):
+        """Calcule survival yield et fragments pour un jeu de donnees."""
+        survival_vals = []
+        fragment_vals = [[] for _ in range(len(fragment_ranges))]
+
+        for volt in sorted_voltages:
+            data = voltage_dict[volt]
+
+            # Filtrer les données valides (mz et intensity finies)
+            mask = np.isfinite(data['mz']) & np.isfinite(data['intensity'])
+            valid_mz = data['mz'][mask]
+            valid_intensity = data['intensity'][mask]
+
+            total_intensity = np.sum(valid_intensity) if len(valid_intensity) > 0 else 0
+
+            # Survival yield
+            if total_intensity > 0:
+                precursor_int = np.sum([
+                    i for mz, i in zip(valid_mz, valid_intensity)
+                    if precursor_min <= mz <= precursor_max
+                ])
+                survival_vals.append(precursor_int / total_intensity)
+            else:
+                survival_vals.append(0.0)
+
+            # Fragments
+            for idx, (frag_min, frag_max) in enumerate(fragment_ranges):
+                if total_intensity > 0:
+                    frag_int = np.sum([
+                        i for mz, i in zip(valid_mz, valid_intensity)
+                        if frag_min <= mz <= frag_max
+                    ])
+                    fragment_vals[idx].append(frag_int / total_intensity)
+                else:
+                    fragment_vals[idx].append(0.0)
+
+        return survival_vals, fragment_vals
     
-    # Upload CSV file
-    uploaded_file = st.file_uploader(t("Téléverse ton fichier CSV", "Upload your CSV file"), type=["csv"])
+    # Upload CSV file(s)
+    uploaded_files = st.file_uploader(
+        t("Téléverse un ou plusieurs fichiers CSV", "Upload one or more CSV files"),
+        type=["csv"],
+        accept_multiple_files=True
+    )
     
     # Encoding selection
     encoding_option = st.selectbox(t("Choisis l'encodage du fichier", "Select file encoding"), options=["UTF-8", "latin1"], index=0)
     
-    if uploaded_file:
+    if uploaded_files:
         # Sélection du format de données
         data_format = st.selectbox(
             t("Format des données CSV", "CSV data format"),
@@ -336,137 +378,123 @@ def app():
             best_sep = max(sep_counts, key=sep_counts.get)
             return best_sep if sep_counts[best_sep] > 0 else ','
 
-        try:
-            uploaded_file.seek(0)
-            sample_text = uploaded_file.read(16384).decode(encoding_option, errors='replace')
-            uploaded_file.seek(0)
-            detected_sep = detect_separator(sample_text)
-        except Exception as e:
-            st.error(t(f"Erreur de lecture du fichier : {e}", f"File read error: {e}"))
-            st.stop()
-
-        def read_csv_flexible(header='infer'):
+        def parse_one_dataset(file_obj):
             try:
-                uploaded_file.seek(0)
-                return pd.read_csv(uploaded_file, header=header, sep=detected_sep, encoding=encoding_option)
-            except Exception:
-                uploaded_file.seek(0)
-                # Fallback for unusual CSVs where separator is inconsistent.
-                return pd.read_csv(uploaded_file, header=header, sep=None, engine='python', encoding=encoding_option)
-    
-        try:
+                file_obj.seek(0)
+                sample_text = file_obj.read(16384).decode(encoding_option, errors='replace')
+                file_obj.seek(0)
+                detected_sep = detect_separator(sample_text)
+            except Exception as e:
+                raise ValueError(t(f"Erreur de lecture du fichier : {e}", f"File read error: {e}"))
+
+            def read_csv_flexible(header='infer'):
+                try:
+                    file_obj.seek(0)
+                    return pd.read_csv(file_obj, header=header, sep=detected_sep, encoding=encoding_option)
+                except Exception:
+                    file_obj.seek(0)
+                    # Fallback for unusual CSVs where separator is inconsistent.
+                    return pd.read_csv(file_obj, header=header, sep=None, engine='python', encoding=encoding_option)
+
+            voltage_dict = {}
+            voltages = []
+
             if data_format == "TWIMExtract":
-                # Traitement format TWIMExtract (code original)
                 df = read_csv_flexible(header=2)
-    
-                # Vérification format fichier
                 if str(df.columns[0]).strip() != "$TrapCV:":
-                    st.error(t("Format invalide : première colonne doit être '$TrapCV:'", "Invalid format: first column must be '$TrapCV:'"))
-                    st.stop()
-    
-                # Extraction m/z (float) avec gestion des NaN
+                    raise ValueError(t("Format invalide : première colonne doit être '$TrapCV:'", "Invalid format: first column must be '$TrapCV:'"))
+
                 mz_values = pd.to_numeric(df.iloc[:, 0], errors='coerce').values
-    
-                # Extraction voltages (convertit 4.0 -> 4, 6.0 -> 6, etc.)
                 voltage_labels = df.columns[1:]
-                voltages = []
-    
+
                 for label in voltage_labels:
                     try:
                         voltage = int(float(str(label).strip()))
                         voltages.append(voltage)
                     except Exception:
-                        st.warning(t(f"Colonne ignorée : {label}", f"Ignored column: {label}"))
-    
-                # Construction voltage_dict
-                voltage_dict = {}
+                        st.warning(f"[{file_obj.name}] " + t(f"Colonne ignorée : {label}", f"Ignored column: {label}"))
+
                 for idx, volt in enumerate(voltages):
                     intensity_values = pd.to_numeric(df.iloc[:, idx + 1], errors='coerce').values
                     voltage_dict[volt] = {
                         'mz': mz_values,
                         'intensity': intensity_values
                     }
-    
-            elif data_format == "Manuel": # Format Manuel
-                # Traitement format Manuel (nouveau format)
+
+            elif data_format == "Manuel":
                 df = read_csv_flexible()
-    
-                # Identification des colonnes : alternance M/Z, Intensité, M/Z, Intensité, etc.
-                voltage_dict = {}
-                voltages = []
-    
-                # Parcourir les colonnes par paires
-                for col_idx in range(1, len(df.columns), 2): # Colonnes d'intensité (indices impairs : 1, 3, 5, ...)
+
+                for col_idx in range(1, len(df.columns), 2):
                     if col_idx >= len(df.columns):
                         break
-    
-                    mz_col_idx = col_idx - 1 # Colonne M/Z correspondante (indices pairs : 0, 2, 4, ...)
-                    intensity_col_idx = col_idx # Colonne intensité
-    
-                    # Extraire le voltage depuis l'en-tête de la colonne d'intensité
+
+                    mz_col_idx = col_idx - 1
+                    intensity_col_idx = col_idx
                     intensity_col_name = str(df.columns[intensity_col_idx]).strip()
-    
+
                     try:
-                        # Le voltage devrait être directement la valeur numérique dans l'en-tête
                         voltage = int(float(intensity_col_name))
                         voltages.append(voltage)
-    
-                        # Extraire les données M/Z et intensité avec gestion des NaN
+
                         mz_values = pd.to_numeric(df.iloc[:, mz_col_idx], errors='coerce').values
                         intensity_values = pd.to_numeric(df.iloc[:, intensity_col_idx], errors='coerce').values
-    
+
                         voltage_dict[voltage] = {
                             'mz': mz_values,
                             'intensity': intensity_values
                         }
-    
                     except Exception as e:
-                        st.warning(t(f"Erreur lors du traitement des colonnes {mz_col_idx+1}-{intensity_col_idx+1} (voltage: {intensity_col_name}) : {e}",
-                                    f"Error processing columns {mz_col_idx+1}-{intensity_col_idx+1} (voltage: {intensity_col_name}): {e}"))
+                        st.warning(
+                            f"[{file_obj.name}] " +
+                            t(f"Erreur lors du traitement des colonnes {mz_col_idx+1}-{intensity_col_idx+1} (voltage: {intensity_col_name}) : {e}",
+                              f"Error processing columns {mz_col_idx+1}-{intensity_col_idx+1} (voltage: {intensity_col_name}): {e}")
+                        )
 
-            else: # FelionyX Batch Extract
+            else:
                 df_raw = read_csv_flexible(header=None)
 
                 if df_raw.shape[0] < 3 or df_raw.shape[1] < 2:
-                    st.error(t(
-                        "Format FelionyX invalide : fichier trop court (au moins 3 lignes et 2 colonnes).",
-                        "Invalid FelionyX format: file too short (at least 3 rows and 2 columns)."
-                    ))
-                    st.stop()
+                    raise ValueError(
+                        t(
+                            "Format FelionyX invalide : fichier trop court (au moins 3 lignes et 2 colonnes).",
+                            "Invalid FelionyX format: file too short (at least 3 rows and 2 columns)."
+                        )
+                    )
 
                 title_row = df_raw.iloc[0]
                 header_row = df_raw.iloc[1].astype(str).str.strip().str.lower()
                 data_df = df_raw.iloc[2:].reset_index(drop=True)
-
-                voltage_dict = {}
-                voltages = []
 
                 for mz_col_idx in range(0, data_df.shape[1], 2):
                     intensity_col_idx = mz_col_idx + 1
                     if intensity_col_idx >= data_df.shape[1]:
                         continue
 
-                    # Voltage is usually on first row at mz column (e.g. "20V").
                     voltage_label = title_row.iloc[mz_col_idx]
                     voltage = parse_voltage_from_label(voltage_label)
                     if voltage is None:
-                        # Fallback: try paired intensity column title if needed.
                         voltage = parse_voltage_from_label(title_row.iloc[intensity_col_idx])
 
                     if voltage is None:
-                        st.warning(t(
-                            f"Paire de colonnes ignorée ({mz_col_idx+1}-{intensity_col_idx+1}) : voltage non détecté ({voltage_label}).",
-                            f"Ignored column pair ({mz_col_idx+1}-{intensity_col_idx+1}): no voltage detected ({voltage_label})."
-                        ))
+                        st.warning(
+                            f"[{file_obj.name}] " +
+                            t(
+                                f"Paire de colonnes ignorée ({mz_col_idx+1}-{intensity_col_idx+1}) : voltage non détecté ({voltage_label}).",
+                                f"Ignored column pair ({mz_col_idx+1}-{intensity_col_idx+1}): no voltage detected ({voltage_label})."
+                            )
+                        )
                         continue
 
                     mz_header = header_row.iloc[mz_col_idx] if mz_col_idx < len(header_row) else ""
                     int_header = header_row.iloc[intensity_col_idx] if intensity_col_idx < len(header_row) else ""
                     if ("m/z" not in mz_header and "mz" not in mz_header) or ("int" not in int_header):
-                        st.warning(t(
-                            f"Paire {voltage}V importée malgré en-têtes inattendus: '{mz_header}' / '{int_header}'.",
-                            f"Pair {voltage}V imported despite unexpected headers: '{mz_header}' / '{int_header}'."
-                        ))
+                        st.warning(
+                            f"[{file_obj.name}] " +
+                            t(
+                                f"Paire {voltage}V importée malgré en-têtes inattendus: '{mz_header}' / '{int_header}'.",
+                                f"Pair {voltage}V imported despite unexpected headers: '{mz_header}' / '{int_header}'."
+                            )
+                        )
 
                     mz_values = pd.to_numeric(data_df.iloc[:, mz_col_idx], errors='coerce').values
                     intensity_values = pd.to_numeric(data_df.iloc[:, intensity_col_idx], errors='coerce').values
@@ -476,17 +504,49 @@ def app():
                         'intensity': intensity_values
                     }
                     voltages.append(voltage)
-    
-        except Exception as e:
-            st.error(t(f"Erreur de lecture CSV : {e}", f"CSV read error: {e}"))
+
+            if not voltage_dict:
+                raise ValueError(t("Aucun voltage valide détecté", "No valid voltages found"))
+
+            return {
+                'name': file_obj.name,
+                'voltage_dict': voltage_dict,
+                'sorted_voltages': sorted(set(voltages))
+            }
+
+        datasets = []
+        for file_obj in uploaded_files:
+            try:
+                datasets.append(parse_one_dataset(file_obj))
+            except Exception as e:
+                st.warning(f"[{file_obj.name}] {e}")
+
+        if not datasets:
+            st.error(t("Aucun fichier valide détecté", "No valid dataset could be loaded"))
             st.stop()
-    
-        if not voltage_dict:
-            st.error(t("Aucun voltage valide détecté", "No valid voltages found"))
-            st.stop()
-    
-        # Tri des voltages
-        sorted_voltages = sorted(set(voltages))
+
+        dataset_names = [d['name'] for d in datasets]
+
+        if len(datasets) > 1:
+            st.info(
+                t(
+                    f"{len(datasets)} jeux de données chargés. Sélectionnez le jeu principal pour l'analyse détaillée puis utilisez la section comparaison.",
+                    f"{len(datasets)} datasets loaded. Select the primary dataset for detailed analysis, then use the comparison section."
+                )
+            )
+            selected_dataset_name = st.selectbox(
+                t("Jeu de données principal", "Primary dataset"),
+                dataset_names,
+                index=0
+            )
+        else:
+            selected_dataset_name = dataset_names[0]
+
+        active_dataset = next(d for d in datasets if d['name'] == selected_dataset_name)
+        voltage_dict = active_dataset['voltage_dict']
+        sorted_voltages = active_dataset['sorted_voltages']
+
+        st.caption(t(f"Jeu actif: {selected_dataset_name}", f"Active dataset: {selected_dataset_name}"))
     
         # Sélection des voltages à afficher
         all_voltages_option = st.checkbox(t("Afficher toutes les courbes", "Show all curves"))
@@ -570,40 +630,13 @@ def app():
             fragment_labels.append(frag_label)
     
         # Calcul des intensités avec gestion robuste des NaN
-        survival_yield = []
-        fragment_intensities = [[] for _ in range(num_fragments)]
-    
-        for volt in sorted_voltages:
-            data = voltage_dict[volt]
-    
-            # Filtrer les données valides (mz et intensity finies)
-            mask = np.isfinite(data['mz']) & np.isfinite(data['intensity'])
-            valid_mz = data['mz'][mask]
-            valid_intensity = data['intensity'][mask]
-    
-            # Calculer l'intensité totale
-            total_intensity = np.sum(valid_intensity) if len(valid_intensity) > 0 else 0
-    
-            # Survival yield
-            if total_intensity > 0:
-                precursor_int = np.sum([
-                    i for mz, i in zip(valid_mz, valid_intensity)
-                    if precursor_min <= mz <= precursor_max
-                ])
-                survival_yield.append(precursor_int / total_intensity)
-            else:
-                survival_yield.append(0.0)
-    
-            # Fragments — normalisation comme le parent
-            for idx, (frag_min, frag_max) in enumerate(fragment_ranges):
-                if total_intensity > 0:
-                    frag_int = np.sum([
-                        i for mz, i in zip(valid_mz, valid_intensity)
-                        if frag_min <= mz <= frag_max
-                    ])
-                    fragment_intensities[idx].append(frag_int / total_intensity)
-                else:
-                    fragment_intensities[idx].append(0.0)
+        survival_yield, fragment_intensities = compute_breakdown_arrays(
+            voltage_dict,
+            sorted_voltages,
+            precursor_min,
+            precursor_max,
+            fragment_ranges
+        )
     
         # ============================================================================
         # NOUVELLE SECTION: EXCLUSION DE POINTS
@@ -755,6 +788,137 @@ def app():
             fragment_intensities_plot = [fi.copy() for fi in fragment_intensities_filtered]
             survival_yield_all_plot = survival_yield.copy()
             fragment_intensities_all_plot = [fi.copy() for fi in fragment_intensities]
+
+        # ============================================================================
+        # COMPARAISON MULTI-DATASETS
+        # ============================================================================
+
+        if len(datasets) > 1:
+            st.subheader(t("📊 Comparaison entre jeux de données", "📊 Multi-dataset comparison"))
+
+            compare_curve_options = [t("Survival Yield", "Survival Yield")] + fragment_labels
+            compare_curve_target = st.selectbox(
+                t("Courbe à comparer", "Curve to compare"),
+                compare_curve_options,
+                key="compare_curve_target"
+            )
+
+            compare_dataset_names = st.multiselect(
+                t("Jeux de données à comparer", "Datasets to compare"),
+                options=dataset_names,
+                default=dataset_names,
+                key="compare_dataset_names"
+            )
+
+            if not compare_dataset_names:
+                st.warning(t("Sélectionnez au moins un jeu de données.", "Select at least one dataset."))
+            else:
+                fig_cmp, ax_cmp = plt.subplots()
+                has_compare_data = False
+                compare_rows = []
+
+                for ds in datasets:
+                    if ds['name'] not in compare_dataset_names:
+                        continue
+
+                    ds_survival, ds_fragments = compute_breakdown_arrays(
+                        ds['voltage_dict'],
+                        ds['sorted_voltages'],
+                        precursor_min,
+                        precursor_max,
+                        fragment_ranges
+                    )
+
+                    if compare_curve_target == t("Survival Yield", "Survival Yield"):
+                        y_values = ds_survival
+                    else:
+                        frag_idx_cmp = fragment_labels.index(compare_curve_target)
+                        y_values = ds_fragments[frag_idx_cmp]
+
+                    if enable_normalization:
+                        y_values, _ = normalize_series(y_values, normalization_target_max)
+
+                    valid_pairs = [
+                        (x, y)
+                        for x, y in zip(ds['sorted_voltages'], y_values)
+                        if np.isfinite(y)
+                    ]
+
+                    if not valid_pairs:
+                        continue
+
+                    xv = [p[0] for p in valid_pairs]
+                    yv = [p[1] for p in valid_pairs]
+                    ax_cmp.plot(xv, yv, 'o-', linewidth=2, markersize=5, label=ds['name'])
+                    for x_val, y_val in valid_pairs:
+                        compare_rows.append({
+                            "Dataset": ds['name'],
+                            "Voltage": x_val,
+                            "Value": y_val
+                        })
+                    has_compare_data = True
+
+                if has_compare_data:
+                    ax_cmp.set_xlabel(t("Voltage de collision (V)", "Collision voltage (V)"))
+                    if enable_normalization:
+                        if normalization_target_max == 100.0:
+                            ax_cmp.set_ylabel(t("Intensité normalisée (%)", "Normalized intensity (%)"))
+                        else:
+                            ax_cmp.set_ylabel(t("Intensité normalisée (max=1)", "Normalized intensity (max=1)"))
+                    else:
+                        ax_cmp.set_ylabel(t("Ratio d'intensité", "Intensity ratio"))
+
+                    ax_cmp.set_title(t("Comparaison des courbes de dissociation", "Breakdown curve comparison"))
+                    ax_cmp.grid(True, alpha=0.3)
+                    ax_cmp.legend()
+                    st.pyplot(fig_cmp)
+                    st.caption(t(
+                        "La comparaison utilise les points complets de chaque jeu (sans exclusion de points).",
+                        "Comparison uses full points for each dataset (without point exclusion)."
+                    ))
+
+                    if compare_rows:
+                        compare_df = pd.DataFrame(compare_rows)
+                        compare_df["Curve"] = compare_curve_target
+                        compare_df["Normalization_Enabled"] = enable_normalization
+                        compare_df["Normalization_Max"] = normalization_target_max if enable_normalization else np.nan
+
+                        compare_wide_df = compare_df.pivot_table(
+                            index="Voltage",
+                            columns="Dataset",
+                            values="Value",
+                            aggfunc="first"
+                        ).reset_index()
+
+                        svg_cmp_buffer = io.BytesIO()
+                        fig_cmp.savefig(svg_cmp_buffer, format='svg')
+                        svg_cmp_buffer.seek(0)
+
+                        excel_cmp_buffer = io.BytesIO()
+                        with pd.ExcelWriter(excel_cmp_buffer, engine='xlsxwriter') as writer:
+                            compare_df.to_excel(writer, sheet_name='Comparison_Long', index=False)
+                            compare_wide_df.to_excel(writer, sheet_name='Comparison_Wide', index=False)
+                        excel_cmp_buffer.seek(0)
+
+                        col_cmp_export_1, col_cmp_export_2 = st.columns(2)
+                        with col_cmp_export_1:
+                            st.download_button(
+                                label=t("Télécharger comparaison SVG", "Download comparison SVG"),
+                                data=svg_cmp_buffer.getvalue(),
+                                file_name="comparison_breakdown_curves.svg",
+                                mime="image/svg+xml",
+                                key="download_compare_svg"
+                            )
+                        with col_cmp_export_2:
+                            st.download_button(
+                                label=t("Télécharger comparaison Excel", "Download comparison Excel"),
+                                data=excel_cmp_buffer.getvalue(),
+                                file_name="comparison_breakdown_curves.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                key="download_compare_excel"
+                            )
+                else:
+                    st.warning(t("Aucune donnée valide à afficher pour la comparaison.", "No valid data to display for comparison."))
     
         # ============================================================================
         # SIGMOID FITTING SECTION AVEC SIGMOID STATISTIQUE SIMPLE
