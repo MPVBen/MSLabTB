@@ -258,18 +258,47 @@ def app():
         # Sélection du format de données
         data_format = st.selectbox(
             t("Format des données CSV", "CSV data format"),
-            ["TWIMExtract", "Manuel"],
+            ["TWIMExtract", "Manuel", "FelionyX Batch Extract"],
             index=0,
             help=t(
-                "TWIMExtract: format standard avec '$TrapCV:' en première colonne\nManuel: colonnes alternées M/Z et Intensité pour chaque voltage",
-                "TWIMExtract: standard format with '$TrapCV:' in first column\nManuel: alternating M/Z and Intensity columns for each voltage"
+                "TWIMExtract: format standard avec '$TrapCV:' en première colonne\nManuel: colonnes alternees M/Z et Intensite pour chaque voltage\nFelionyX Batch Extract: 1ere ligne = voltages (ex: 20V), 2e ligne = m/z et Intensite par paires",
+                "TWIMExtract: standard format with '$TrapCV:' in first column\nManuel: alternating M/Z and Intensity columns for each voltage\nFelionyX Batch Extract: 1st row = voltages (e.g. 20V), 2nd row = m/z and Intensity in pairs"
             )
         )
+
+        def normalize_voltage_value(value):
+            value = float(value)
+            return int(value) if float(value).is_integer() else value
+
+        def parse_voltage_from_label(label):
+            label_str = str(label).strip()
+            if not label_str:
+                return None
+
+            # Accept labels like "36", "36.0", "36V", "36.0 V".
+            match = re.search(r'(-?\d+(?:[\.,]\d+)?)\s*[Vv]?$', label_str)
+            if not match:
+                return None
+
+            try:
+                return normalize_voltage_value(match.group(1).replace(',', '.'))
+            except Exception:
+                return None
+
+        def read_csv_flexible(content_text, header='infer'):
+            # sep=None lets pandas auto-detect comma/semicolon delimiters.
+            return pd.read_csv(io.StringIO(content_text), header=header, sep=None, engine='python')
+
+        try:
+            uploaded_text = uploaded_file.getvalue().decode(encoding_option, errors='replace')
+        except Exception as e:
+            st.error(t(f"Erreur de lecture du fichier : {e}", f"File read error: {e}"))
+            st.stop()
     
         try:
             if data_format == "TWIMExtract":
                 # Traitement format TWIMExtract (code original)
-                df = pd.read_csv(uploaded_file, header=2, encoding=encoding_option)
+                df = read_csv_flexible(uploaded_text, header=2)
     
                 # Vérification format fichier
                 if str(df.columns[0]).strip() != "$TrapCV:":
@@ -299,9 +328,9 @@ def app():
                         'intensity': intensity_values
                     }
     
-            else: # Format Manuel
+            elif data_format == "Manuel": # Format Manuel
                 # Traitement format Manuel (nouveau format)
-                df = pd.read_csv(uploaded_file, encoding=encoding_option)
+                df = read_csv_flexible(uploaded_text)
     
                 # Identification des colonnes : alternance M/Z, Intensité, M/Z, Intensité, etc.
                 voltage_dict = {}
@@ -335,6 +364,59 @@ def app():
                     except Exception as e:
                         st.warning(t(f"Erreur lors du traitement des colonnes {mz_col_idx+1}-{intensity_col_idx+1} (voltage: {intensity_col_name}) : {e}",
                                     f"Error processing columns {mz_col_idx+1}-{intensity_col_idx+1} (voltage: {intensity_col_name}): {e}"))
+
+            else: # FelionyX Batch Extract
+                df_raw = read_csv_flexible(uploaded_text, header=None)
+
+                if df_raw.shape[0] < 3 or df_raw.shape[1] < 2:
+                    st.error(t(
+                        "Format FelionyX invalide : fichier trop court (au moins 3 lignes et 2 colonnes).",
+                        "Invalid FelionyX format: file too short (at least 3 rows and 2 columns)."
+                    ))
+                    st.stop()
+
+                title_row = df_raw.iloc[0]
+                header_row = df_raw.iloc[1].astype(str).str.strip().str.lower()
+                data_df = df_raw.iloc[2:].reset_index(drop=True)
+
+                voltage_dict = {}
+                voltages = []
+
+                for mz_col_idx in range(0, data_df.shape[1], 2):
+                    intensity_col_idx = mz_col_idx + 1
+                    if intensity_col_idx >= data_df.shape[1]:
+                        continue
+
+                    # Voltage is usually on first row at mz column (e.g. "20V").
+                    voltage_label = title_row.iloc[mz_col_idx]
+                    voltage = parse_voltage_from_label(voltage_label)
+                    if voltage is None:
+                        # Fallback: try paired intensity column title if needed.
+                        voltage = parse_voltage_from_label(title_row.iloc[intensity_col_idx])
+
+                    if voltage is None:
+                        st.warning(t(
+                            f"Paire de colonnes ignorée ({mz_col_idx+1}-{intensity_col_idx+1}) : voltage non détecté ({voltage_label}).",
+                            f"Ignored column pair ({mz_col_idx+1}-{intensity_col_idx+1}): no voltage detected ({voltage_label})."
+                        ))
+                        continue
+
+                    mz_header = header_row.iloc[mz_col_idx] if mz_col_idx < len(header_row) else ""
+                    int_header = header_row.iloc[intensity_col_idx] if intensity_col_idx < len(header_row) else ""
+                    if ("m/z" not in mz_header and "mz" not in mz_header) or ("int" not in int_header):
+                        st.warning(t(
+                            f"Paire {voltage}V importée malgré en-têtes inattendus: '{mz_header}' / '{int_header}'.",
+                            f"Pair {voltage}V imported despite unexpected headers: '{mz_header}' / '{int_header}'."
+                        ))
+
+                    mz_values = pd.to_numeric(data_df.iloc[:, mz_col_idx], errors='coerce').values
+                    intensity_values = pd.to_numeric(data_df.iloc[:, intensity_col_idx], errors='coerce').values
+
+                    voltage_dict[voltage] = {
+                        'mz': mz_values,
+                        'intensity': intensity_values
+                    }
+                    voltages.append(voltage)
     
         except Exception as e:
             st.error(t(f"Erreur de lecture CSV : {e}", f"CSV read error: {e}"))
@@ -345,7 +427,7 @@ def app():
             st.stop()
     
         # Tri des voltages
-        sorted_voltages = sorted(voltages)
+        sorted_voltages = sorted(set(voltages))
     
         # Sélection des voltages à afficher
         all_voltages_option = st.checkbox(t("Afficher toutes les courbes", "Show all curves"))
