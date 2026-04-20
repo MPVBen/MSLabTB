@@ -29,7 +29,12 @@ def app():
     
     def safe_max(data, default=1.0):
         """Calcule le maximum en ignorant NaN et Inf, avec une valeur par défaut"""
-        if not data:
+        if data is None:
+            return default
+        try:
+            if len(data) == 0:
+                return default
+        except TypeError:
             return default
         # Convertir en array numpy et filtrer les valeurs finies
         clean_data = np.array(data)
@@ -40,7 +45,12 @@ def app():
     
     def safe_min(data, default=0.0):
         """Calcule le minimum en ignorant NaN et Inf, avec une valeur par défaut"""
-        if not data:
+        if data is None:
+            return default
+        try:
+            if len(data) == 0:
+                return default
+        except TypeError:
             return default
         # Convertir en array numpy et filtrer les valeurs finies
         clean_data = np.array(data)
@@ -285,20 +295,37 @@ def app():
             except Exception:
                 return None
 
-        def read_csv_flexible(content_text, header='infer'):
-            # sep=None lets pandas auto-detect comma/semicolon delimiters.
-            return pd.read_csv(io.StringIO(content_text), header=header, sep=None, engine='python')
+        def detect_separator(sample_text):
+            sep_counts = {
+                ';': sample_text.count(';'),
+                ',': sample_text.count(','),
+                '\t': sample_text.count('\t')
+            }
+            best_sep = max(sep_counts, key=sep_counts.get)
+            return best_sep if sep_counts[best_sep] > 0 else ','
 
         try:
-            uploaded_text = uploaded_file.getvalue().decode(encoding_option, errors='replace')
+            uploaded_file.seek(0)
+            sample_text = uploaded_file.read(16384).decode(encoding_option, errors='replace')
+            uploaded_file.seek(0)
+            detected_sep = detect_separator(sample_text)
         except Exception as e:
             st.error(t(f"Erreur de lecture du fichier : {e}", f"File read error: {e}"))
             st.stop()
+
+        def read_csv_flexible(header='infer'):
+            try:
+                uploaded_file.seek(0)
+                return pd.read_csv(uploaded_file, header=header, sep=detected_sep, encoding=encoding_option)
+            except Exception:
+                uploaded_file.seek(0)
+                # Fallback for unusual CSVs where separator is inconsistent.
+                return pd.read_csv(uploaded_file, header=header, sep=None, engine='python', encoding=encoding_option)
     
         try:
             if data_format == "TWIMExtract":
                 # Traitement format TWIMExtract (code original)
-                df = read_csv_flexible(uploaded_text, header=2)
+                df = read_csv_flexible(header=2)
     
                 # Vérification format fichier
                 if str(df.columns[0]).strip() != "$TrapCV:":
@@ -330,7 +357,7 @@ def app():
     
             elif data_format == "Manuel": # Format Manuel
                 # Traitement format Manuel (nouveau format)
-                df = read_csv_flexible(uploaded_text)
+                df = read_csv_flexible()
     
                 # Identification des colonnes : alternance M/Z, Intensité, M/Z, Intensité, etc.
                 voltage_dict = {}
@@ -366,7 +393,7 @@ def app():
                                     f"Error processing columns {mz_col_idx+1}-{intensity_col_idx+1} (voltage: {intensity_col_name}): {e}"))
 
             else: # FelionyX Batch Extract
-                df_raw = read_csv_flexible(uploaded_text, header=None)
+                df_raw = read_csv_flexible(header=None)
 
                 if df_raw.shape[0] < 3 or df_raw.shape[1] < 2:
                     st.error(t(
@@ -785,10 +812,15 @@ def app():
     
         # Points exclus (si il y en a)
         if enable_exclusion and excluded_indices:
-            excluded_voltages_plot = [sorted_voltages[i] for i in excluded_indices]
-            excluded_survival_plot = [survival_yield[i] for i in excluded_indices if np.isfinite(survival_yield[i])]
-    
-            if len(excluded_voltages_plot) > 0 and len(excluded_survival_plot) > 0:
+            excluded_pairs = [
+                (sorted_voltages[i], survival_yield[i])
+                for i in sorted(excluded_indices)
+                if np.isfinite(survival_yield[i])
+            ]
+
+            if excluded_pairs:
+                excluded_voltages_plot = [p[0] for p in excluded_pairs]
+                excluded_survival_plot = [p[1] for p in excluded_pairs]
                 ax.plot(excluded_voltages_plot, excluded_survival_plot, 'x', 
                        label=t("Survival Yield (exclus)", "Survival Yield (excluded)"), 
                        color='red', markersize=8, markeredgewidth=2)
@@ -804,10 +836,15 @@ def app():
     
             # Fragments exclus
             if enable_exclusion and excluded_indices:
-                excluded_frag_voltages = [sorted_voltages[i] for i in excluded_indices]
-                excluded_frag_intensities = [fragment_intensities[idx][i] for i in excluded_indices if np.isfinite(fragment_intensities[idx][i])]
-    
-                if len(excluded_frag_voltages) > 0 and len(excluded_frag_intensities) > 0:
+                excluded_frag_pairs = [
+                    (sorted_voltages[i], fragment_intensities[idx][i])
+                    for i in sorted(excluded_indices)
+                    if np.isfinite(fragment_intensities[idx][i])
+                ]
+
+                if excluded_frag_pairs:
+                    excluded_frag_voltages = [p[0] for p in excluded_frag_pairs]
+                    excluded_frag_intensities = [p[1] for p in excluded_frag_pairs]
                     ax.plot(excluded_frag_voltages, excluded_frag_intensities, 's', 
                            label=f"{fragment_labels[idx]} (exclus)", 
                            color='red', markersize=6, alpha=0.6)
