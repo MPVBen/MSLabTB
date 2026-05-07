@@ -1470,7 +1470,24 @@ def app():
             fit_result = None
     
         # Personnalisation des axes breakdown curve AVEC PROTECTION CONTRE NaN/Inf
-        st.markdown(t("**Personnalisation des axes pour la courbe de dissociation**", "**Breakdown curve axis customization**"))
+        st.markdown(t("**Personnalisation des axes et du graphique pour la courbe de dissociation**", "**Breakdown curve axis and graph customization**"))
+        
+        # Titre et labels
+        graph_title = st.text_input(t("Titre du graphique", "Graph title"), value="")
+        x_axis_label = st.text_input(t("Nom de l'axe X", "X axis label"), value=t("Voltage de collision (V)", "Collision voltage (V)"))
+        
+        if enable_normalization:
+            default_y_label = t("Intensité normalisée (%)", "Normalized intensity (%)") if normalization_target_max == 100.0 else t("Intensité normalisée (max=1)", "Normalized intensity (max=1)")
+        else:
+            default_y_label = t("Survival Yield", "Survival yield")
+            
+        y_axis_label = st.text_input(t("Nom de l'axe Y", "Y axis label"), value=default_y_label)
+        
+        col_leg1, col_leg2 = st.columns(2)
+        with col_leg1:
+            show_legend = st.checkbox(t("Afficher la légende", "Show legend"), value=True)
+        with col_leg2:
+            survival_curve_name = st.text_input(t("Nom de la courbe Survival Yield", "Survival Yield curve name"), value="Survival Yield")
     
         # Calculs sécurisés des limites par défaut (utiliser les données filtrées pour un meilleur zoom)
         y_default_limit = normalization_target_max if enable_normalization else 1.0
@@ -1506,7 +1523,7 @@ def app():
         valid_survival = [s for s in survival_yield_plot if np.isfinite(s)]
     
         if len(valid_voltages) > 0 and len(valid_survival) > 0:
-            ax.plot(valid_voltages, valid_survival, 'o-', label=t("Survival Yield (inclus)", "Survival Yield (included)"), 
+            ax.plot(valid_voltages, valid_survival, 'o-', label=survival_curve_name, 
                     linewidth=2, markersize=6)
     
         # Points exclus (si il y en a)
@@ -1521,7 +1538,7 @@ def app():
                 excluded_voltages_plot = [p[0] for p in excluded_pairs]
                 excluded_survival_plot = [p[1] for p in excluded_pairs]
                 ax.plot(excluded_voltages_plot, excluded_survival_plot, 'x', 
-                       label=t("Survival Yield (exclus)", "Survival Yield (excluded)"), 
+                       label=f"{survival_curve_name} " + t("(exclus)", "(excluded)"), 
                        color='red', markersize=8, markeredgewidth=2)
     
         # Fragments (données filtrées pour l'analyse)
@@ -1531,7 +1548,7 @@ def app():
     
             if len(valid_frag_voltages) > 0 and len(valid_frag_intensities) > 0:
                 ax.plot(valid_frag_voltages, valid_frag_intensities, 'x--', 
-                       label=f"{fragment_labels[idx]} (inclus)", alpha=0.8)
+                       label=fragment_labels[idx], alpha=0.8)
     
             # Fragments exclus
             if enable_exclusion and excluded_indices:
@@ -1545,7 +1562,7 @@ def app():
                     excluded_frag_voltages = [p[0] for p in excluded_frag_pairs]
                     excluded_frag_intensities = [p[1] for p in excluded_frag_pairs]
                     ax.plot(excluded_frag_voltages, excluded_frag_intensities, 's', 
-                           label=f"{fragment_labels[idx]} (exclus)", 
+                           label=f"{fragment_labels[idx]} " + t("(exclus)", "(excluded)"), 
                            color='red', markersize=6, alpha=0.6)
     
         # Ajouter le fit sigmoïde si activé (utilise les données filtrées)
@@ -1557,14 +1574,11 @@ def app():
                        label=f"📈 {fit_result['method']} (V50={fit_result['v50']:.1f}V, R²={fit_result['r2']:.3f})", 
                        alpha=0.8)
     
-        ax.set_xlabel(t("Voltage de collision (V)", "Collision voltage (V)"))
-        if enable_normalization:
-            if normalization_target_max == 100.0:
-                ax.set_ylabel(t("Intensité normalisée (%)", "Normalized intensity (%)"))
-            else:
-                ax.set_ylabel(t("Intensité normalisée (max=1)", "Normalized intensity (max=1)"))
-        else:
-            ax.set_ylabel(t("Survival Yield", "Survival yield"))
+        if graph_title.strip():
+            ax.set_title(graph_title)
+            
+        ax.set_xlabel(x_axis_label)
+        ax.set_ylabel(y_axis_label)
     
         # Application sécurisée des limites
         try:
@@ -1577,7 +1591,9 @@ def app():
             ax.set_ylim([0, 1])
             ax.set_xlim([0, 50])
     
-        ax.legend()
+        if show_legend:
+            ax.legend()
+            
         ax.grid(True, alpha=0.3)
         st.pyplot(fig2)
     
