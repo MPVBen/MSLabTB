@@ -1082,6 +1082,23 @@ def app():
                     if cmp_x_step <= 0:
                         cmp_x_step = 1.0
 
+                    cmp_graph_title = st.text_input(t("Titre du graphique (comparaison)", "Graph title (comparison)"), value="", key="cmp_graph_title")
+                    cmp_x_axis_label = st.text_input(t("Nom de l'axe X (comparaison)", "X axis label (comparison)"), value=t("Voltage de collision (V)", "Collision voltage (V)"), key="cmp_x_axis_label")
+                    
+                    if enable_normalization:
+                        cmp_default_y_label = t("Intensité normalisée (%)", "Normalized intensity (%)") if normalization_target_max == 100.0 else t("Intensité normalisée (max=1)", "Normalized intensity (max=1)")
+                    else:
+                        cmp_default_y_label = t("Ratio d'intensité", "Intensity ratio")
+                    cmp_y_axis_label = st.text_input(t("Nom de l'axe Y (comparaison)", "Y axis label (comparison)"), value=cmp_default_y_label, key="cmp_y_axis_label")
+                    
+                    cmp_show_legend = st.checkbox(t("Afficher la légende", "Show legend"), value=True, key="cmp_show_legend")
+
+                    st.markdown(t("**Noms des courbes (comparaison)**", "**Curve names (comparison)**"))
+                    custom_curve_names = {}
+                    for row in comparison_payload:
+                        new_name = st.text_input(f"{t('Nom pour', 'Name for')} '{row['name']}'", value=row['name'], key=f"name_{row['name']}")
+                        custom_curve_names[row['name']] = new_name
+
                     enable_compare_sigmoid = st.checkbox(
                         t("✅ Afficher l'ajustement sigmoïde sur le graphe de comparaison", "✅ Show sigmoid fit on comparison graph"),
                         value=False,
@@ -1124,7 +1141,8 @@ def app():
                     fit_summary_rows = []
 
                     for row in comparison_payload:
-                        line_obj, = ax_cmp.plot(row["x"], row["y"], 'o-', linewidth=2, markersize=5, label=row["name"])
+                        display_name = custom_curve_names.get(row["name"], row["name"])
+                        line_obj, = ax_cmp.plot(row["x"], row["y"], 'o-', linewidth=2, markersize=5, label=display_name)
 
                         if enable_compare_sigmoid:
                             if len(row["x"]) >= 4:
@@ -1140,11 +1158,11 @@ def app():
                                             linewidth=1.8,
                                             color=line_obj.get_color(),
                                             alpha=0.9,
-                                            label=f"{row['name']} fit (V50={cmp_fit['v50']:.1f}V)"
+                                            label=f"{display_name} fit (V50={cmp_fit['v50']:.1f}V)"
                                         )
 
                                     fit_row = {
-                                        "Dataset": row["name"],
+                                        "Dataset": display_name,
                                         "Method": compare_sigmoid_method,
                                         "Status": "OK",
                                         "V50": cmp_fit["v50"],
@@ -1172,7 +1190,7 @@ def app():
                                     fit_summary_rows.append(fit_row)
                                 else:
                                     failed_row = {
-                                        "Dataset": row["name"],
+                                        "Dataset": display_name,
                                         "Method": compare_sigmoid_method,
                                         "Status": "Failed",
                                         "V50": np.nan,
@@ -1189,7 +1207,7 @@ def app():
                                     fit_summary_rows.append(failed_row)
                             else:
                                 insufficient_row = {
-                                    "Dataset": row["name"],
+                                    "Dataset": display_name,
                                     "Method": compare_sigmoid_method,
                                     "Status": "Insufficient points",
                                     "V50": np.nan,
@@ -1204,14 +1222,13 @@ def app():
                                     insufficient_row["V10_V90_Width"] = np.nan
                                 fit_summary_rows.append(insufficient_row)
 
-                    ax_cmp.set_xlabel(t("Voltage de collision (V)", "Collision voltage (V)"))
-                    if enable_normalization:
-                        if normalization_target_max == 100.0:
-                            ax_cmp.set_ylabel(t("Intensité normalisée (%)", "Normalized intensity (%)"))
-                        else:
-                            ax_cmp.set_ylabel(t("Intensité normalisée (max=1)", "Normalized intensity (max=1)"))
+                    if cmp_graph_title.strip():
+                        ax_cmp.set_title(cmp_graph_title)
                     else:
-                        ax_cmp.set_ylabel(t("Ratio d'intensité", "Intensity ratio"))
+                        ax_cmp.set_title(t("Comparaison des courbes de dissociation", "Breakdown curve comparison"))
+
+                    ax_cmp.set_xlabel(cmp_x_axis_label)
+                    ax_cmp.set_ylabel(cmp_y_axis_label)
 
                     try:
                         ax_cmp.set_ylim([cmp_y_min, cmp_y_max])
@@ -1225,9 +1242,9 @@ def app():
                             f"Automatic comparison-axis configuration used ({e})."
                         ))
 
-                    ax_cmp.set_title(t("Comparaison des courbes de dissociation", "Breakdown curve comparison"))
                     ax_cmp.grid(True, alpha=0.3)
-                    ax_cmp.legend()
+                    if cmp_show_legend:
+                        ax_cmp.legend()
                     st.pyplot(fig_cmp)
                     st.caption(t(
                         "La comparaison utilise les points complets de chaque jeu (sans exclusion de points).",
